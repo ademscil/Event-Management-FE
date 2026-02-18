@@ -1,6 +1,7 @@
 export interface UserListItem {
   UserId: string;
   Username: string;
+  NPK?: string | null;
   DisplayName: string;
   Email: string;
   Role: "SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead" | string;
