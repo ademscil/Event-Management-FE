@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { adminNavigation } from "@/config/navigation";
 import { logout, validateSession } from "@/lib/auth";
 import type { AuthUser } from "@/types/auth";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -97,7 +98,7 @@ export default function AdminShell({ children }: AdminShellProps) {
       <header className={styles.header}>
         <div>
           <Link className={styles.logoLink} href="/admin/dashboard">
-            <img className={styles.logo} src="/assets/img/logo.png" alt="Logo" />
+            <Image className={styles.logo} src="/assets/img/logo.png" alt="Logo" width={28} height={28} priority />
             <span>IT Survey Admin</span>
           </Link>
         </div>
@@ -156,3 +157,6 @@ export default function AdminShell({ children }: AdminShellProps) {
     </div>
   );
 }
+
+
+

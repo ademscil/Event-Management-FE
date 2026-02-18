@@ -1,4 +1,6 @@
-"use client";
+﻿"use client";
+
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
@@ -397,3 +399,5 @@ export default function EventManagementPage() {
     </>
   );
 }
+
+

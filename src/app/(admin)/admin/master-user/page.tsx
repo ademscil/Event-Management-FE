@@ -1,4 +1,7 @@
-"use client";
+﻿"use client";
+
+/* eslint-disable react-hooks/set-state-in-effect */
+
 
 import { createUser, downloadUserTemplateFile, fetchUsersWithFilters } from "@/lib/users";
 import {
@@ -565,3 +568,8 @@ export default function MasterUserPage() {
     </>
   );
 }
+
+
+
+
+

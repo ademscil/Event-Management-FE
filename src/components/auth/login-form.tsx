@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
 import { login } from "@/lib/auth";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import styles from "./login-form.module.css";
@@ -51,7 +52,7 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
     <div className={styles.page}>
       <div className={styles.card}>
         <div className={styles.header}>
-          <img className={styles.logo} src="/assets/img/logo.png" alt="IT Survey Logo" />
+          <Image className={styles.logo} src="/assets/img/logo.png" alt="IT Survey Logo" width={48} height={48} priority />
           <h1 className={styles.title}>Portal Event Management</h1>
           <p className={styles.subtitle}>Masuk ke sistem manajemen event</p>
         </div>
@@ -114,3 +115,5 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
     </div>
   );
 }
+
+
