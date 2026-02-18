@@ -1,7 +1,6 @@
-﻿"use client";
+"use client";
 
 /* eslint-disable react-hooks/set-state-in-effect */
-
 
 import { createUser, downloadUserTemplateFile, fetchUsersWithFilters } from "@/lib/users";
 import {
@@ -11,7 +10,8 @@ import {
   type DivisionOption,
 } from "@/lib/org-hierarchy";
 import type { UserListItem } from "@/types/user";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { SearchBar } from "@/components/admin/search-bar";
 import styles from "../page-mockup.module.css";
 
 function roleLabel(role: string): string {
@@ -29,10 +29,31 @@ function roleLabel(role: string): string {
   }
 }
 
+function matchesUserSearch(user: UserListItem, searchBy: string, keyword: string): boolean {
+  const term = keyword.trim().toLowerCase();
+  if (!term) return true;
+
+  if (searchBy === "npk") return (user.NPK || "").toLowerCase().includes(term);
+  if (searchBy === "username") return user.Username.toLowerCase().includes(term);
+  if (searchBy === "name") return user.DisplayName.toLowerCase().includes(term);
+  if (searchBy === "email") return user.Email.toLowerCase().includes(term);
+  if (searchBy === "role") return roleLabel(user.Role).toLowerCase().includes(term);
+
+  return (
+    (user.NPK || "").toLowerCase().includes(term) ||
+    user.Username.toLowerCase().includes(term) ||
+    user.DisplayName.toLowerCase().includes(term) ||
+    user.Email.toLowerCase().includes(term) ||
+    roleLabel(user.Role).toLowerCase().includes(term)
+  );
+}
+
 export default function MasterUserPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [searchBy, setSearchBy] = useState("all");
   const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
@@ -41,6 +62,7 @@ export default function MasterUserPage() {
   const [submittingUser, setSubmittingUser] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUsername, setNewUsername] = useState("");
+  const [newNpk, setNewNpk] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<"SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead">("AdminEvent");
@@ -62,7 +84,7 @@ export default function MasterUserPage() {
     (department) => !newDivisionId || department.DivisionId === newDivisionId
   );
 
-  const loadUsers = useCallback(async (searchText = keyword) => {
+  const loadUsers = useCallback(async (searchText = appliedKeyword) => {
     setLoading(true);
     const result = await fetchUsersWithFilters({
       search: searchText,
@@ -81,10 +103,9 @@ export default function MasterUserPage() {
     setUsers(result.users);
     setError("");
     setLoading(false);
-  }, [keyword, roleFilter, statusFilter, departmentFilter]);
+  }, [appliedKeyword, roleFilter, statusFilter, departmentFilter]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUsers();
   }, [loadUsers]);
 
@@ -104,6 +125,8 @@ export default function MasterUserPage() {
 
   const onSearch: React.FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
     void loadUsers(keyword);
   };
 
@@ -177,9 +200,13 @@ export default function MasterUserPage() {
     window.alert("Download data user akan dihubungkan pada step berikutnya.");
   };
 
+  const displayedUsers = useMemo(() => {
+    return users.filter((user) => matchesUserSearch(user, appliedSearchBy, appliedKeyword));
+  }, [users, appliedSearchBy, appliedKeyword]);
+
   const onCreateUser = async () => {
-    if (!newUsername.trim() || !newDisplayName.trim() || !newEmail.trim()) {
-      window.alert("Username, Name, dan Email wajib diisi.");
+    if (!newUsername.trim() || !newNpk.trim() || !newDisplayName.trim() || !newEmail.trim()) {
+      window.alert("Username, NPK, Name, dan Email wajib diisi.");
       return;
     }
     if (!newBusinessUnitId || !newDivisionId || !newDepartmentId) {
@@ -194,6 +221,7 @@ export default function MasterUserPage() {
     setSubmittingUser(true);
     const result = await createUser({
       username: newUsername.trim(),
+      npk: newNpk.trim(),
       displayName: newDisplayName.trim(),
       email: newEmail.trim(),
       role: newRole,
@@ -212,6 +240,7 @@ export default function MasterUserPage() {
 
     setShowCreateModal(false);
     setNewUsername("");
+    setNewNpk("");
     setNewDisplayName("");
     setNewEmail("");
     setNewRole("AdminEvent");
@@ -221,7 +250,7 @@ export default function MasterUserPage() {
     setNewDepartmentId("");
     setNewStatus("Active");
     setNewPassword("");
-    await loadUsers(keyword);
+    await loadUsers(appliedKeyword);
   };
 
   return (
@@ -289,39 +318,37 @@ export default function MasterUserPage() {
               <option value="all">All</option>
             </select>
           </div>
-          <div className={styles.masterSearchRow}>
-            <select
-              className={styles.masterSearchSelect}
-              value={searchBy}
-              onChange={(event) => setSearchBy(event.target.value)}
-            >
-              <option value="all">Search By</option>
-              <option value="username">NPK</option>
-              <option value="name">Name</option>
-              <option value="email">Email</option>
-              <option value="role">Role</option>
-            </select>
-            <input
-              className={`${styles.input} ${styles.masterSearchInput}`}
-              type="search"
-              placeholder="search here ..."
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-            />
-            <button className={styles.masterSearchButton} type="submit">
-              Search
-            </button>
-            <button className={styles.masterDownloadButton} type="button" onClick={onDownload}>
-              Download
-            </button>
-          </div>
+          <SearchBar
+            rowClassName={styles.masterSearchRow}
+            selectClassName={styles.masterSearchSelect}
+            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
+            buttonClassName={styles.masterSearchButton}
+            options={[
+              { value: "all", label: "Search By" },
+              { value: "npk", label: "NPK" },
+              { value: "username", label: "Username" },
+              { value: "name", label: "Name" },
+              { value: "email", label: "Email" },
+              { value: "role", label: "Role" },
+            ]}
+            selectedValue={searchBy}
+            keyword={keyword}
+            onSelectedValueChange={setSearchBy}
+            onKeywordChange={setKeyword}
+            buttonType="submit"
+            trailingContent={(
+              <button className={styles.masterDownloadButton} type="button" onClick={onDownload}>
+                Download
+              </button>
+            )}
+          />
         </form>
       </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Daftar User</h2>
-          <div className={styles.meta}>Total {users.length} users</div>
+          <div className={styles.meta}>Total {displayedUsers.length} users</div>
         </div>
 
         {error ? <div className={styles.meta}>{error}</div> : null}
@@ -343,14 +370,14 @@ export default function MasterUserPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 ? (
+                {displayedUsers.length === 0 ? (
                   <tr>
                     <td colSpan={8}>Tidak ada data user</td>
                   </tr>
                 ) : (
-                  users.map((user) => (
+                  displayedUsers.map((user) => (
                     <tr key={user.UserId}>
-                      <td>{user.Username}</td>
+                      <td>{user.NPK || "-"}</td>
                       <td>{user.DisplayName}</td>
                       <td>{user.Email}</td>
                       <td>{roleLabel(user.Role)}</td>
@@ -415,7 +442,7 @@ export default function MasterUserPage() {
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom minimal: Username/NPK, Nama, Email, Role, Status.
+          Format file: Excel (.xlsx/.xls). Kolom minimal: Username, NPK, Nama, Email, Role, Status.
           Opsional: UseLDAP, Password (wajib bila UseLDAP=false).
         </div>
       </section>
@@ -450,12 +477,12 @@ export default function MasterUserPage() {
                   </button>
                 </div>
                 <div className={styles.formGroup}>
-                  <label className={styles.label}>Full Name</label>
+                  <label className={styles.label}>Username</label>
                   <input
                     className={styles.input}
-                    placeholder="Nama user"
-                    value={newDisplayName}
-                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    placeholder="username"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -463,8 +490,17 @@ export default function MasterUserPage() {
                   <input
                     className={styles.input}
                     placeholder="Nomor NPK"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
+                    value={newNpk}
+                    onChange={(e) => setNewNpk(e.target.value)}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Full Name</label>
+                  <input
+                    className={styles.input}
+                    placeholder="Nama user"
+                    value={newDisplayName}
+                    onChange={(e) => setNewDisplayName(e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -568,8 +604,6 @@ export default function MasterUserPage() {
     </>
   );
 }
-
-
 
 
 

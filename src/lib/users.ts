@@ -144,6 +144,7 @@ export async function fetchUsersWithFilters(input: {
 
 export async function createUser(input: {
   username: string;
+  npk?: string;
   displayName: string;
   email: string;
   role: "SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead";
@@ -212,3 +213,5 @@ export async function downloadUserTemplateFile(): Promise<{
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
+
+
