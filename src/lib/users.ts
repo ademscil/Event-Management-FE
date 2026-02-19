@@ -14,6 +14,33 @@ export type AdminEventUser = {
   IsActive: boolean;
 };
 
+export type UserRole = "SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead";
+
+export type CreateUserInput = {
+  username: string;
+  npk?: string;
+  displayName: string;
+  email: string;
+  role: UserRole;
+  useLDAP: boolean;
+  businessUnitId: string;
+  divisionId: string;
+  departmentId: string;
+  password?: string;
+};
+
+export type UpdateUserInput = {
+  username?: string;
+  npk?: string;
+  displayName?: string;
+  email?: string;
+  role?: UserRole;
+  businessUnitId?: string;
+  divisionId?: string;
+  departmentId?: string;
+  isActive?: boolean;
+};
+
 function getErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
   const maybePayload = payload as Record<string, unknown>;
@@ -142,18 +169,7 @@ export async function fetchUsersWithFilters(input: {
   }
 }
 
-export async function createUser(input: {
-  username: string;
-  npk?: string;
-  displayName: string;
-  email: string;
-  role: "SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead";
-  useLDAP: boolean;
-  businessUnitId: string;
-  divisionId: string;
-  departmentId: string;
-  password?: string;
-}): Promise<{ success: boolean; message?: string }> {
+export async function createUser(input: CreateUserInput): Promise<{ success: boolean; message?: string }> {
   const token = getAccessToken();
   if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
 
@@ -173,6 +189,84 @@ export async function createUser(input: {
 
     if (!response.ok || !payload?.success) {
       return { success: false, message: getErrorMessage(payload, "Gagal membuat user") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function updateUser(userId: string, input: UpdateUserInput): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/users/${userId}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; message?: string; error?: string; details?: Array<{ msg?: string }> }
+      | null;
+
+    if (!response.ok || !payload?.success) {
+      return { success: false, message: getErrorMessage(payload, "Gagal memperbarui user") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function toggleUserLdap(userId: string, useLDAP: boolean): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/users/${userId}/ldap`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ useLDAP }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok) {
+      return { success: false, message: getErrorMessage(payload, "Gagal update LDAP user") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function setUserPassword(userId: string, password: string): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/users/${userId}/password`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok) {
+      return { success: false, message: getErrorMessage(payload, "Gagal update password user") };
     }
 
     return { success: true };
@@ -213,5 +307,3 @@ export async function downloadUserTemplateFile(): Promise<{
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
-
-

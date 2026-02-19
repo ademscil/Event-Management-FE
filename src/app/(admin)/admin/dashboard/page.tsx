@@ -3,6 +3,7 @@
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
+import { SearchBar } from "@/components/admin/search-bar";
 import styles from "../page-mockup.module.css";
 
 function formatPeriod(startDate: string, endDate: string): string {
@@ -26,10 +27,29 @@ function formatScore(value: number | null | undefined): string {
   return String(value);
 }
 
+function matchesDateRange(survey: SurveyOverviewItem, start: string, end: string): boolean {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const surveyStart = new Date(survey.StartDate);
+  const surveyEnd = new Date(survey.EndDate);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return true;
+  return surveyStart >= startDate && surveyEnd <= endDate;
+}
+
 export default function DashboardPage() {
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [periodStart, setPeriodStart] = useState("2026-01-01");
+  const [periodEnd, setPeriodEnd] = useState("2026-12-31");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -45,9 +65,30 @@ export default function DashboardPage() {
     })();
   }, []);
 
+  const filteredSurveys = useMemo(() => {
+    const normalizedKeyword = appliedKeyword.trim().toLowerCase();
+
+    return surveys.filter((survey) => {
+      if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
+
+      if (statusFilter !== "all" && survey.Status.toLowerCase() !== statusFilter) return false;
+
+      if (!normalizedKeyword) return true;
+
+      if (appliedSearchBy === "event") {
+        return survey.Title.toLowerCase().includes(normalizedKeyword);
+      }
+
+      return (
+        survey.Title.toLowerCase().includes(normalizedKeyword) ||
+        survey.Status.toLowerCase().includes(normalizedKeyword)
+      );
+    });
+  }, [surveys, periodStart, periodEnd, statusFilter, appliedKeyword, appliedSearchBy]);
+
   const lastUpdatedText = useMemo(() => {
-    if (surveys.length === 0) return "Last updated: -";
-    const latest = surveys.reduce((prev, current) => {
+    if (filteredSurveys.length === 0) return "Last updated: -";
+    const latest = filteredSurveys.reduce((prev, current) => {
       const prevDate = new Date(prev.UpdatedAt || prev.CreatedAt || 0).getTime();
       const currentDate = new Date(current.UpdatedAt || current.CreatedAt || 0).getTime();
       return currentDate > prevDate ? current : prev;
@@ -58,7 +99,12 @@ export default function DashboardPage() {
       month: "short",
       year: "numeric",
     }).format(latestDate)}`;
-  }, [surveys]);
+  }, [filteredSurveys]);
+
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
 
   return (
     <>
@@ -77,33 +123,45 @@ export default function DashboardPage() {
             id="periodStart"
             className={`${styles.input} ${styles.periodInput}`}
             type="date"
-            defaultValue="2026-01-01"
+            value={periodStart}
+            onChange={(event) => setPeriodStart(event.target.value)}
           />
           <input
             className={`${styles.input} ${styles.periodInput}`}
             type="date"
-            defaultValue="2026-12-31"
+            value={periodEnd}
+            onChange={(event) => setPeriodEnd(event.target.value)}
           />
         </div>
         <div className={styles.periodRow}>
           <div className={styles.periodLabel}>STATUS</div>
           <div className={styles.periodColon}>:</div>
-          <select id="status" className={`${styles.select} ${styles.statusControl}`} defaultValue="all">
+          <select
+            id="status"
+            className={`${styles.select} ${styles.statusControl}`}
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
             <option value="all">All</option>
             <option value="active">Active</option>
             <option value="closed">Closed</option>
           </select>
         </div>
-        <div className={styles.searchRow}>
-          <select className={styles.searchSelect} defaultValue="all">
-            <option value="all">Search By</option>
-            <option value="event">Event</option>
-          </select>
-          <input className={`${styles.input} ${styles.searchInput}`} placeholder="search here ..." />
-          <button className={styles.searchButton} type="button">
-            Search
-          </button>
-        </div>
+        <SearchBar
+          rowClassName={styles.masterSearchRow}
+          selectClassName={styles.masterSearchSelect}
+          inputClassName={`${styles.input} ${styles.masterSearchInput}`}
+          buttonClassName={styles.masterSearchButton}
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "event", label: "Event" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>
@@ -128,12 +186,12 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {surveys.length === 0 ? (
+                {filteredSurveys.length === 0 ? (
                   <tr>
                     <td colSpan={7}>Tidak ada data survey</td>
                   </tr>
                 ) : (
-                  surveys.map((survey) => (
+                  filteredSurveys.map((survey) => (
                     <tr key={survey.SurveyId}>
                       <td>{survey.Title}</td>
                       <td>{formatPeriod(survey.StartDate, survey.EndDate)}</td>

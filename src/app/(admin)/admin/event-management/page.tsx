@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
@@ -6,6 +6,7 @@ import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
+import { SearchBar } from "@/components/admin/search-bar";
 import styles from "../page-mockup.module.css";
 
 function formatPeriod(startDate: string, endDate: string): string {
@@ -47,6 +48,25 @@ function getStatusClass(status: string): string {
   return styles.badgeClosed;
 }
 
+function matchesDateRange(survey: SurveyOverviewItem, start: string, end: string): boolean {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const surveyStart = new Date(survey.StartDate);
+  const surveyEnd = new Date(survey.EndDate);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return true;
+  return surveyStart >= startDate && surveyEnd <= endDate;
+}
+
+function matchesStatusFilter(status: string, filter: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "draft") return status === "Draft";
+  if (filter === "design") return status === "In Design";
+  if (filter === "active") return status === "Active";
+  if (filter === "closed") return status === "Closed";
+  return true;
+}
+
 export default function EventManagementPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -56,11 +76,19 @@ export default function EventManagementPage() {
   const [adminEventSuggestions, setAdminEventSuggestions] = useState<AdminEventUser[]>([]);
   const [showAdminSuggestion, setShowAdminSuggestion] = useState(false);
   const [draftDescription, setDraftDescription] = useState("");
+
   const [periodStart, setPeriodStart] = useState("2026-01-01");
   const [periodEnd, setPeriodEnd] = useState("2026-12-31");
+  const [statusFilter, setStatusFilter] = useState("all");
+
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
 
   const activeAdminQuery = useMemo(() => adminEventInput.trim(), [adminEventInput]);
 
@@ -101,13 +129,36 @@ export default function EventManagementPage() {
     return () => clearTimeout(timeoutId);
   }, [activeAdminQuery, showCreateModal]);
 
-  const sortedSurveys = useMemo(() => {
-    return [...surveys].sort((a, b) => {
-      const aDate = new Date(a.UpdatedAt || a.CreatedAt || 0).getTime();
-      const bDate = new Date(b.UpdatedAt || b.CreatedAt || 0).getTime();
-      return bDate - aDate;
-    });
-  }, [surveys]);
+  const filteredAndSortedSurveys = useMemo(() => {
+    const normalizedKeyword = appliedKeyword.trim().toLowerCase();
+
+    return surveys
+      .filter((survey) => {
+        if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
+        if (!matchesStatusFilter(survey.Status, statusFilter)) return false;
+
+        if (!normalizedKeyword) return true;
+
+        if (appliedSearchBy === "event") {
+          return survey.Title.toLowerCase().includes(normalizedKeyword);
+        }
+
+        if (appliedSearchBy === "admin") {
+          return (survey.AssignedAdminName || "").toLowerCase().includes(normalizedKeyword);
+        }
+
+        return (
+          survey.Title.toLowerCase().includes(normalizedKeyword) ||
+          (survey.AssignedAdminName || "").toLowerCase().includes(normalizedKeyword) ||
+          survey.Status.toLowerCase().includes(normalizedKeyword)
+        );
+      })
+      .sort((a, b) => {
+        const aDate = new Date(a.UpdatedAt || a.CreatedAt || 0).getTime();
+        const bDate = new Date(b.UpdatedAt || b.CreatedAt || 0).getTime();
+        return bDate - aDate;
+      });
+  }, [surveys, periodStart, periodEnd, statusFilter, appliedSearchBy, appliedKeyword]);
 
   const closeModal = () => {
     setShowCreateModal(false);
@@ -162,6 +213,11 @@ export default function EventManagementPage() {
     await loadEvents();
   };
 
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
+
   return (
     <>
       <div className={styles.pageHead}>
@@ -205,7 +261,12 @@ export default function EventManagementPage() {
         <div className={styles.periodRow}>
           <div className={styles.periodLabel}>STATUS</div>
           <div className={styles.periodColon}>:</div>
-          <select id="status" className={`${styles.select} ${styles.statusControl}`} defaultValue="all">
+          <select
+            id="status"
+            className={`${styles.select} ${styles.statusControl}`}
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
             <option value="all">All</option>
             <option value="draft">Draft Empty</option>
             <option value="design">In Design</option>
@@ -213,24 +274,28 @@ export default function EventManagementPage() {
             <option value="closed">Closed</option>
           </select>
         </div>
-
-        <div className={styles.searchRow}>
-          <select className={styles.searchSelect} defaultValue="all">
-            <option value="all">Search By</option>
-            <option value="event">Event Name</option>
-            <option value="admin">Admin Event</option>
-          </select>
-          <input className={`${styles.input} ${styles.searchInput}`} placeholder="search here ..." />
-          <button className={styles.searchButton} type="button">
-            Search
-          </button>
-        </div>
+        <SearchBar
+          rowClassName={styles.masterSearchRow}
+          selectClassName={styles.masterSearchSelect}
+          inputClassName={`${styles.input} ${styles.masterSearchInput}`}
+          buttonClassName={styles.masterSearchButton}
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "event", label: "Event Name" },
+            { value: "admin", label: "Admin Event" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Daftar Event</h2>
-          <span className={styles.meta}>Showing {sortedSurveys.length} surveys</span>
+          <span className={styles.meta}>Showing {filteredAndSortedSurveys.length} surveys</span>
         </div>
         {error ? <div className={styles.meta}>{error}</div> : null}
         {loading ? <div className={styles.meta}>Memuat data event...</div> : null}
@@ -247,12 +312,12 @@ export default function EventManagementPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedSurveys.length === 0 ? (
+                {filteredAndSortedSurveys.length === 0 ? (
                   <tr>
                     <td colSpan={5}>Tidak ada data survey</td>
                   </tr>
                 ) : (
-                  sortedSurveys.map((row) => (
+                  filteredAndSortedSurveys.map((row) => (
                     <tr key={row.SurveyId}>
                       <td>{row.Title}</td>
                       <td>{row.AssignedAdminName || "-"}</td>
@@ -399,5 +464,3 @@ export default function EventManagementPage() {
     </>
   );
 }
-
-

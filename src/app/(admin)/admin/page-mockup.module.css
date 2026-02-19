@@ -93,10 +93,9 @@
 }
 
 .statusControl {
-  width: 100%;
-  max-width: 530px;
+  height: 42px;
   font-size: 14px;
-  padding: 9px 12px;
+  padding: 0 12px;
 }
 
 .periodLabel {
@@ -107,26 +106,32 @@
   font-weight: 600;
 }
 
-.periodColon {
-  font-size: 13px;
-  color: #163761;
-  line-height: 1;
-  font-weight: 600;
-}
 
 .periodInput {
   width: 100%;
-  max-width: 290px;
+  max-width: 170px;
+  min-width: 170px;
+  height: 42px;
   font-size: 14px;
-  padding: 9px 12px;
+  padding: 0 10px;
 }
+
+
+.periodRow .statusControl {
+  width: 350px !important;
+  max-width: 350px !important;
+  flex: 0 0 350px;
+}
+
 
 .searchRow {
   display: flex;
   align-items: stretch;
-  max-width: 760px;
-  margin-top: 4px;
+  width: 100%;
+  max-width: 620px;
+  margin-top: 6px;
 }
+
 
 .searchSelect {
   border: 1px solid #2f55d4;
@@ -135,35 +140,50 @@
   color: #ffffff;
   border-radius: 12px 0 0 12px;
   padding: 0 14px;
+  width: 150px;
+  min-width: 150px;
   font-size: 14px;
   font-weight: 600;
+  flex-shrink: 0;
 }
+
+
+
 
 .searchInput {
   border-radius: 0;
   border-right: 0;
   font-size: 14px;
   padding: 9px 12px;
+  flex: 0 1 300px;
+  width: 300px;
+  min-width: 220px;
 }
+
 
 .searchButton {
   border: 1px solid #2f55d4;
+  border-left: 0;
   background: #2f55d4;
   color: #ffffff;
   border-radius: 0 12px 12px 0;
   padding: 0 18px;
+  min-width: 104px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  flex-shrink: 0;
 }
+
 
 .masterSearchRow {
   display: flex;
   align-items: stretch;
   width: 100%;
-  max-width: 840px;
+  max-width: 620px;
   margin-top: 6px;
 }
+
 
 .masterSearchSelect {
   border: 1px solid #2f55d4;
@@ -172,8 +192,19 @@
   color: #ffffff;
   border-radius: 12px 0 0 12px;
   padding: 0 14px;
+  width: 112px;
+  min-width: 112px;
+  flex-shrink: 0;
   font-size: 14px;
   font-weight: 600;
+}
+
+
+
+.searchSelect option,
+.masterSearchSelect option {
+  background: #ffffff;
+  color: #111827;
 }
 
 .masterSearchInput {
@@ -181,6 +212,9 @@
   border-right: 0;
   font-size: 14px;
   padding: 9px 12px;
+  flex: 0 1 300px;
+  width: 300px;
+  min-width: 220px;
 }
 
 .masterSearchButton {
@@ -190,6 +224,8 @@
   color: #ffffff;
   border-radius: 0 12px 12px 0;
   padding: 0 18px;
+  min-width: 104px;
+  flex-shrink: 0;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -213,7 +249,7 @@
 
 .table {
   width: 100%;
-  min-width: 860px;
+  min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
@@ -228,6 +264,7 @@
   padding: 13px 14px;
   text-align: left;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .table th {
@@ -317,12 +354,15 @@
 .modalCard {
   width: 100%;
   max-width: 520px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
 }
-
 .wideModalCard {
   max-width: 1080px;
 }
@@ -333,6 +373,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .modalTitle {
@@ -345,15 +386,23 @@
 .modalClose {
   width: 32px;
   height: 32px;
-  border: 1px solid #d1d5db;
+  border: 0;
   border-radius: 8px;
-  background: #ffffff;
+  background: transparent;
   color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
   cursor: pointer;
 }
 
 .modalBody {
   padding: 20px 22px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .modalGridTwo {
@@ -383,6 +432,7 @@
 }
 
 .toggleThumb {
+  display: block;
   width: 24px;
   height: 24px;
   border-radius: 999px;
@@ -402,6 +452,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .chipInputWrap {
@@ -564,18 +615,104 @@
 
   .periodLabel,
   .periodColon {
-    display: none;
+    min-width: auto;
   }
 
   .periodInput {
-    max-width: none;
-  }
+  width: 100%;
+  max-width: 170px;
+  min-width: 170px;
+  height: 42px;
+  font-size: 14px;
+  padding: 0 10px;
+}
+
+
+.periodRow .statusControl {
+  width: 350px !important;
+  max-width: 350px !important;
+  flex: 0 0 350px;
+}
 
   .searchRow {
-    max-width: none;
+    max-width: 100%;
   }
 
   .modalGridTwo {
     grid-template-columns: 1fr;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pagination > div:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pagination button {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #1f2937;
+  border-radius: 8px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.pagination button[aria-current="page"] {
+  border-color: #2f55d4;
+  background: #2f55d4;
+  color: #ffffff;
+}
+
+.pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

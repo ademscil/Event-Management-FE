@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { createUser, downloadUserTemplateFile, fetchUsersWithFilters } from "@/lib/users";
+import { createUser, downloadUserTemplateFile, fetchUsersWithFilters, setUserPassword, toggleUserLdap, updateUser } from "@/lib/users";
 import {
   fetchOrgHierarchy,
   type BusinessUnitOption,
@@ -11,8 +11,12 @@ import {
 } from "@/lib/org-hierarchy";
 import type { UserListItem } from "@/types/user";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pagination } from "@/components/admin/pagination";
 import { SearchBar } from "@/components/admin/search-bar";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import styles from "../page-mockup.module.css";
+
+const ITEMS_PER_PAGE = 10;
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -56,11 +60,13 @@ export default function MasterUserPage() {
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedFileName, setSelectedFileName] = useState("No file chosen");
   const [loading, setLoading] = useState(true);
   const [submittingUser, setSubmittingUser] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [newUsername, setNewUsername] = useState("");
   const [newNpk, setNewNpk] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -76,6 +82,9 @@ export default function MasterUserPage() {
   const [newStatus, setNewStatus] = useState("Active");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
+  const [confirmTargetUser, setConfirmTargetUser] = useState<UserListItem | null>(null);
+  const [confirmNextIsActive, setConfirmNextIsActive] = useState(false);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
 
   const filteredDivisions = divisions.filter(
     (division) => !newBusinessUnitId || division.BusinessUnitId === newBusinessUnitId
@@ -83,6 +92,18 @@ export default function MasterUserPage() {
   const filteredDepartments = departments.filter(
     (department) => !newDivisionId || department.DivisionId === newDivisionId
   );
+
+  const filterDepartments = useMemo(() => {
+    const seen = new Set<string>();
+    const unique: DepartmentOption[] = [];
+    for (const department of departments) {
+      const key = (department.Name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(department);
+    }
+    return unique;
+  }, [departments]);
 
   const loadUsers = useCallback(async (searchText = appliedKeyword) => {
     setLoading(true);
@@ -204,40 +225,24 @@ export default function MasterUserPage() {
     return users.filter((user) => matchesUserSearch(user, appliedSearchBy, appliedKeyword));
   }, [users, appliedSearchBy, appliedKeyword]);
 
-  const onCreateUser = async () => {
-    if (!newUsername.trim() || !newNpk.trim() || !newDisplayName.trim() || !newEmail.trim()) {
-      window.alert("Username, NPK, Name, dan Email wajib diisi.");
-      return;
-    }
-    if (!newBusinessUnitId || !newDivisionId || !newDepartmentId) {
-      window.alert("Business Unit, Divisi, dan Department wajib dipilih.");
-      return;
-    }
-    if (!newUseLdap && newPassword.trim().length < 8) {
-      window.alert("Password minimal 8 karakter untuk user non-LDAP.");
-      return;
-    }
+  const totalPages = Math.max(1, Math.ceil(displayedUsers.length / ITEMS_PER_PAGE));
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return displayedUsers.slice(start, start + ITEMS_PER_PAGE);
+  }, [currentPage, displayedUsers]);
 
-    setSubmittingUser(true);
-    const result = await createUser({
-      username: newUsername.trim(),
-      npk: newNpk.trim(),
-      displayName: newDisplayName.trim(),
-      email: newEmail.trim(),
-      role: newRole,
-      useLDAP: newUseLdap,
-      businessUnitId: newBusinessUnitId,
-      divisionId: newDivisionId,
-      departmentId: newDepartmentId,
-      password: newUseLdap ? undefined : newPassword.trim(),
-    });
-    setSubmittingUser(false);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedKeyword, appliedSearchBy, roleFilter, departmentFilter, statusFilter]);
 
-    if (!result.success) {
-      window.alert(result.message || "Gagal membuat user");
-      return;
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
+  }, [currentPage, totalPages]);
 
+  const resetUserForm = () => {
+    setEditingUser(null);
     setShowCreateModal(false);
     setNewUsername("");
     setNewNpk("");
@@ -250,6 +255,145 @@ export default function MasterUserPage() {
     setNewDepartmentId("");
     setNewStatus("Active");
     setNewPassword("");
+  };
+
+  const openCreateModal = () => {
+    setEditingUser(null);
+    setShowCreateModal(true);
+    setNewUsername("");
+    setNewNpk("");
+    setNewDisplayName("");
+    setNewEmail("");
+    setNewRole("AdminEvent");
+    setNewUseLdap(false);
+    setNewBusinessUnitId("");
+    setNewDivisionId("");
+    setNewDepartmentId("");
+    setNewStatus("Active");
+    setNewPassword("");
+  };
+
+  const openEditModal = (user: UserListItem) => {
+    setEditingUser(user);
+    setShowCreateModal(true);
+    setNewUsername(user.Username || "");
+    setNewNpk(user.NPK || "");
+    setNewDisplayName(user.DisplayName || "");
+    setNewEmail(user.Email || "");
+    setNewRole((user.Role as typeof newRole) || "AdminEvent");
+    setNewUseLdap(Boolean(user.UseLDAP));
+    setNewBusinessUnitId(user.BusinessUnitId || "");
+    setNewDivisionId(user.DivisionId || "");
+    setNewDepartmentId(user.DepartmentId || "");
+    setNewStatus(user.IsActive ? "Active" : "Inactive");
+    setNewPassword("");
+  };
+
+  const onToggleUserStatus = (user: UserListItem) => {
+    setConfirmTargetUser(user);
+    setConfirmNextIsActive(!user.IsActive);
+  };
+
+  const closeStatusConfirm = () => {
+    if (confirmSubmitting) return;
+    setConfirmTargetUser(null);
+  };
+
+  const onConfirmToggleStatus = async () => {
+    if (!confirmTargetUser) return;
+
+    setConfirmSubmitting(true);
+    const result = await updateUser(confirmTargetUser.UserId, { isActive: confirmNextIsActive });
+    setConfirmSubmitting(false);
+
+    if (!result.success) {
+      window.alert(result.message || "Gagal mengubah status user");
+      return;
+    }
+
+    setConfirmTargetUser(null);
+    await loadUsers(appliedKeyword);
+  };
+
+  const onSubmitUser = async () => {
+    if (!newUsername.trim() || !newNpk.trim() || !newDisplayName.trim() || !newEmail.trim()) {
+      window.alert("Username, NPK, Name, dan Email wajib diisi.");
+      return;
+    }
+    if (!newBusinessUnitId || !newDivisionId || !newDepartmentId) {
+      window.alert("Business Unit, Divisi, dan Department wajib dipilih.");
+      return;
+    }
+    if (!newUseLdap && !editingUser && newPassword.trim().length < 8) {
+      window.alert("Password minimal 8 karakter untuk user non-LDAP.");
+      return;
+    }
+
+    setSubmittingUser(true);
+
+    if (!editingUser) {
+      const createResult = await createUser({
+        username: newUsername.trim(),
+        npk: newNpk.trim(),
+        displayName: newDisplayName.trim(),
+        email: newEmail.trim(),
+        role: newRole,
+        useLDAP: newUseLdap,
+        businessUnitId: newBusinessUnitId,
+        divisionId: newDivisionId,
+        departmentId: newDepartmentId,
+        password: newUseLdap ? undefined : newPassword.trim(),
+      });
+      setSubmittingUser(false);
+
+      if (!createResult.success) {
+        window.alert(createResult.message || "Gagal membuat user");
+        return;
+      }
+
+      resetUserForm();
+      await loadUsers(appliedKeyword);
+      return;
+    }
+
+    const updateResult = await updateUser(editingUser.UserId, {
+      username: newUsername.trim(),
+      npk: newNpk.trim(),
+      displayName: newDisplayName.trim(),
+      email: newEmail.trim(),
+      role: newRole,
+      businessUnitId: newBusinessUnitId,
+      divisionId: newDivisionId,
+      departmentId: newDepartmentId,
+      isActive: newStatus === "Active",
+    });
+
+    if (!updateResult.success) {
+      setSubmittingUser(false);
+      window.alert(updateResult.message || "Gagal memperbarui user");
+      return;
+    }
+
+    if (newUseLdap !== editingUser.UseLDAP) {
+      const ldapResult = await toggleUserLdap(editingUser.UserId, newUseLdap);
+      if (!ldapResult.success) {
+        setSubmittingUser(false);
+        window.alert(ldapResult.message || "Gagal memperbarui LDAP user");
+        return;
+      }
+    }
+
+    if (!newUseLdap && newPassword.trim()) {
+      const passwordResult = await setUserPassword(editingUser.UserId, newPassword.trim());
+      if (!passwordResult.success) {
+        setSubmittingUser(false);
+        window.alert(passwordResult.message || "Gagal memperbarui password user");
+        return;
+      }
+    }
+
+    setSubmittingUser(false);
+    resetUserForm();
     await loadUsers(appliedKeyword);
   };
 
@@ -263,7 +407,7 @@ export default function MasterUserPage() {
         <div className={styles.toolbar}>
           <button
             className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
             type="button"
           >
             + Create User
@@ -298,7 +442,7 @@ export default function MasterUserPage() {
               onChange={(event) => setDepartmentFilter(event.target.value)}
             >
               <option value="all">All Departments</option>
-              {departments.map((department) => (
+              {filterDepartments.map((department) => (
                 <option key={department.DepartmentId} value={department.DepartmentId}>
                   {department.Name}
                 </option>
@@ -313,9 +457,9 @@ export default function MasterUserPage() {
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
+              <option value="all">All</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-              <option value="all">All</option>
             </select>
           </div>
           <SearchBar
@@ -355,6 +499,7 @@ export default function MasterUserPage() {
         {loading ? <div className={styles.meta}>Memuat data user...</div> : null}
 
         {!loading && !error ? (
+          <>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
@@ -370,12 +515,12 @@ export default function MasterUserPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayedUsers.length === 0 ? (
+                {paginatedUsers.length === 0 ? (
                   <tr>
                     <td colSpan={8}>Tidak ada data user</td>
                   </tr>
                 ) : (
-                  displayedUsers.map((user) => (
+                  paginatedUsers.map((user) => (
                     <tr key={user.UserId}>
                       <td>{user.NPK || "-"}</td>
                       <td>{user.DisplayName}</td>
@@ -392,12 +537,17 @@ export default function MasterUserPage() {
                       </td>
                       <td>
                         <div className={styles.btnRow}>
-                          <button className={`${styles.btn} ${styles.btnSecondary}`} type="button">
+                          <button
+                            className={`${styles.btn} ${styles.btnSecondary}`}
+                            type="button"
+                            onClick={() => openEditModal(user)}
+                          >
                             Edit
                           </button>
                           <button
                             className={`${styles.btn} ${user.IsActive ? styles.btnDanger : styles.btnPrimary}`}
                             type="button"
+                            onClick={() => onToggleUserStatus(user)}
                           >
                             {user.IsActive ? "Deactivate" : "Activate"}
                           </button>
@@ -409,6 +559,15 @@ export default function MasterUserPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            className={styles.pagination}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={displayedUsers.length}
+            itemsPerPage={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+          />
+          </>
         ) : null}
       </section>
 
@@ -448,17 +607,17 @@ export default function MasterUserPage() {
       </section>
 
       {showCreateModal ? (
-        <div className={styles.modalOverlay} onClick={() => setShowCreateModal(false)} role="presentation">
+        <div className={styles.modalOverlay} onClick={resetUserForm} role="presentation">
           <div
             className={`${styles.modalCard} ${styles.wideModalCard}`}
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Create User"
+            aria-label={editingUser ? "Edit User" : "Create User"}
           >
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Create User</h2>
-              <button className={styles.modalClose} onClick={() => setShowCreateModal(false)} type="button">
+              <h2 className={styles.modalTitle}>{editingUser ? "Edit User" : "Create User"}</h2>
+              <button className={styles.modalClose} onClick={resetUserForm} type="button">
                 x
               </button>
             </div>
@@ -591,19 +750,56 @@ export default function MasterUserPage() {
               </div>
             </div>
             <div className={styles.modalFooter}>
-              <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setShowCreateModal(false)} type="button">
+              <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={resetUserForm} type="button">
                 Cancel
               </button>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={onCreateUser} disabled={submittingUser} type="button">
-                {submittingUser ? "Creating..." : "Create"}
+              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={onSubmitUser} disabled={submittingUser} type="button">
+                {submittingUser ? (editingUser ? "Saving..." : "Creating...") : (editingUser ? "Save" : "Create")}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={Boolean(confirmTargetUser)}
+        title={confirmNextIsActive ? "Activate User" : "Deactivate User"}
+        message={
+          confirmTargetUser
+            ? (confirmNextIsActive
+                ? `Aktifkan user ${confirmTargetUser.DisplayName}?`
+                : `Nonaktifkan user ${confirmTargetUser.DisplayName}?`)
+            : ""
+        }
+        confirmLabel={confirmNextIsActive ? "Activate" : "Deactivate"}
+        variant={confirmNextIsActive ? "primary" : "danger"}
+        isLoading={confirmSubmitting}
+        onConfirm={() => {
+          void onConfirmToggleStatus();
+        }}
+        onCancel={closeStatusConfirm}
+      />
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
