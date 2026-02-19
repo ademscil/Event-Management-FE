@@ -1,6 +1,8 @@
 "use client";
 
+import { getCurrentUser } from "@/lib/auth";
 import { fetchSurveyOverview } from "@/lib/surveys";
+import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentRole] = useState<UserRole | null>(() => getCurrentUser()?.role ?? null);
 
   const [periodStart, setPeriodStart] = useState("2026-01-01");
   const [periodEnd, setPeriodEnd] = useState("2026-12-31");
@@ -100,6 +103,8 @@ export default function DashboardPage() {
       year: "numeric",
     }).format(latestDate)}`;
   }, [filteredSurveys]);
+
+  const showReportAction = currentRole === "AdminEvent";
 
   const onApplySearch = () => {
     setAppliedSearchBy(searchBy);
@@ -183,12 +188,13 @@ export default function DashboardPage() {
                   <th>Target Responden</th>
                   <th>Score</th>
                   <th>Target Score</th>
+                  {showReportAction ? <th>Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredSurveys.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>Tidak ada data survey</td>
+                    <td colSpan={showReportAction ? 8 : 7}>Tidak ada data survey</td>
                   </tr>
                 ) : (
                   filteredSurveys.map((survey) => (
@@ -208,6 +214,11 @@ export default function DashboardPage() {
                       <td>{formatNumber(survey.TargetRespondents)}</td>
                       <td>{formatScore(survey.CurrentScore)}</td>
                       <td>{formatScore(survey.TargetScore)}</td>
+                      {showReportAction ? (
+                        <td>
+                          <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -219,3 +230,4 @@ export default function DashboardPage() {
     </>
   );
 }
+

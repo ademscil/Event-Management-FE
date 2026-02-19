@@ -1,4 +1,4 @@
-.pageHead {
+﻿.pageHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -231,6 +231,39 @@
   cursor: pointer;
 }
 
+
+.masterTableWrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scrollbar-gutter: stable;
+}
+
+.masterTableWrap::-webkit-scrollbar {
+  height: 10px;
+}
+
+.masterTableWrap::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+
+.masterTableWrap::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.masterTableWrap::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.masterTable {
+  width: max-content;
+  min-width: 1200px;
+}
+
 .masterDownloadButton {
   border: 1px solid #2f55d4;
   background: #2f55d4;
@@ -249,7 +282,7 @@
 
 .table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
@@ -702,6 +735,8 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+
 
 
 

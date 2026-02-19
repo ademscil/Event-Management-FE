@@ -2,8 +2,10 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
+import { getCurrentUser } from "@/lib/auth";
 import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
+import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
@@ -84,6 +86,7 @@ export default function EventManagementPage() {
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentRole] = useState<UserRole | null>(() => getCurrentUser()?.role ?? null);
 
   const [searchBy, setSearchBy] = useState("all");
   const [keyword, setKeyword] = useState("");
@@ -213,6 +216,8 @@ export default function EventManagementPage() {
     await loadEvents();
   };
 
+  const canCreateEvent = currentRole === "SuperAdmin";
+
   const onApplySearch = () => {
     setAppliedSearchBy(searchBy);
     setAppliedKeyword(keyword);
@@ -227,15 +232,17 @@ export default function EventManagementPage() {
             Admin Superuser membuat draft kosong, Admin Event melanjutkan desain &amp; mapping.
           </div>
         </div>
-        <div className={styles.toolbar}>
-          <button
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => setShowCreateModal(true)}
-            type="button"
-          >
-            + Create Survey Event
-          </button>
-        </div>
+        {canCreateEvent ? (
+          <div className={styles.toolbar}>
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => setShowCreateModal(true)}
+              type="button"
+            >
+              + Create Survey Event
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <section className={styles.panel}>
