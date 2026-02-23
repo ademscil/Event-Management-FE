@@ -37,9 +37,9 @@ function menuIconClass(icon: string): string {
     case "masterAplikasi":
       return styles.menuMasterAplikasi;
     case "mappingDeptAplikasi":
-      return styles.menuMapping;
+      return styles.menuMappingDept;
     case "mappingFunctionAplikasi":
-      return styles.menuMapping;
+      return styles.menuMappingFunction;
     case "masterUser":
       return styles.menuMasterUser;
     default:
@@ -104,6 +104,7 @@ export default function AdminShell({ children }: AdminShellProps) {
   }
 
   const menu = adminNavigation.filter((item) => item.roles.includes(user.role));
+  const hideSidebar = pathname?.startsWith("/admin/event-management/survey-create");
   const groupedMenu = menu.reduce<Record<string, typeof menu>>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];
     acc[item.group].push(item);
@@ -148,36 +149,38 @@ export default function AdminShell({ children }: AdminShellProps) {
       </header>
 
       <div className={styles.container}>
-        <aside className={styles.sidebar}>
-          <ul className={styles.menu}>
-            {menuOrder.map((groupName) => {
-              const items = groupedMenu[groupName] || [];
-              if (items.length === 0) return null;
+        {!hideSidebar ? (
+          <aside className={styles.sidebar}>
+            <ul className={styles.menu}>
+              {menuOrder.map((groupName) => {
+                const items = groupedMenu[groupName] || [];
+                if (items.length === 0) return null;
 
-              return (
-                <li key={groupName}>
-                  <div className={styles.menuTitle}>{groupName}</div>
-                  {items.map((item) => {
-                    const active = pathname === item.href;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={[
-                          styles.menuLink,
-                          menuIconClass(item.icon),
-                          active ? styles.menuLinkActive : "",
-                        ].join(" ")}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
+                return (
+                  <li key={groupName}>
+                    <div className={styles.menuTitle}>{groupName}</div>
+                    {items.map((item) => {
+                      const active = pathname === item.href;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={[
+                            styles.menuLink,
+                            menuIconClass(item.icon),
+                            active ? styles.menuLinkActive : "",
+                          ].join(" ")}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        ) : null}
 
         <main className={styles.content}>{children}</main>
       </div>

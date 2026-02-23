@@ -3,11 +3,18 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { getCurrentUser } from "@/lib/auth";
-import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
+import {
+  createEventDraft,
+  fetchSurveyOverview,
+  generateEventLink,
+  scheduleEventBlast,
+  scheduleEventReminder,
+} from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
 import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
 import styles from "../page-mockup.module.css";
 
@@ -69,6 +76,35 @@ function matchesStatusFilter(status: string, filter: string): boolean {
   return true;
 }
 
+function toIsoString(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function getDefaultDateTimeLocal(): string {
+  const value = new Date(Date.now() + 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(
+    value.getHours(),
+  )}:${pad(value.getMinutes())}`;
+}
+
+function getDefaultDateLocal(): string {
+  return getDefaultDateTimeLocal().slice(0, 10);
+}
+
+function getDefaultTimeLocal(): string {
+  return getDefaultDateTimeLocal().slice(11, 16);
+}
+
+function getDayOfWeekFromLocalDateTime(value: string): number {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 1;
+  return date.getDay();
+}
+
 export default function EventManagementPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -79,38 +115,75 @@ export default function EventManagementPage() {
   const [showAdminSuggestion, setShowAdminSuggestion] = useState(false);
   const [draftDescription, setDraftDescription] = useState("");
 
-  const [periodStart, setPeriodStart] = useState("2026-01-01");
+  const [periodStart, setPeriodStart] = useState("2024-01-01");
   const [periodEnd, setPeriodEnd] = useState("2026-12-31");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [currentRole] = useState<UserRole | null>(() => getCurrentUser()?.role ?? null);
+
+  const [currentUser] = useState(() => getCurrentUser());
+  const [currentRole] = useState<UserRole | null>(() => currentUser?.role ?? null);
 
   const [searchBy, setSearchBy] = useState("all");
   const [keyword, setKeyword] = useState("");
   const [appliedSearchBy, setAppliedSearchBy] = useState("all");
   const [appliedKeyword, setAppliedKeyword] = useState("");
 
+  const [selectedSurveyId, setSelectedSurveyId] = useState("");
+  const [shortenUrl, setShortenUrl] = useState(false);
+  const [embedCover, setEmbedCover] = useState(true);
+  const [channelTab, setChannelTab] = useState<"invitation" | "qr" | "embed">("invitation");
+  const [generatedLink, setGeneratedLink] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
+
+  const [blastMode, setBlastMode] = useState<"once" | "recurring">("once");
+  const [blastFrequency, setBlastFrequency] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [blastDateTime, setBlastDateTime] = useState(getDefaultDateTimeLocal());
+  const [blastStartDate, setBlastStartDate] = useState(getDefaultDateLocal());
+  const [blastTime, setBlastTime] = useState(getDefaultTimeLocal());
+  const [blastDayOfWeek, setBlastDayOfWeek] = useState(getDayOfWeekFromLocalDateTime(getDefaultDateTimeLocal()));
+  const [blastMessage, setBlastMessage] = useState("Hi! Would you mind taking 2 minutes to complete this form? It would help us improve our service.");
+  const [blastLoading, setBlastLoading] = useState(false);
+
+  const [reminderRecipients, setReminderRecipients] = useState("app-portalb2b@component.astra.co.id");
+  const [reminderMode, setReminderMode] = useState<"once" | "recurring">("once");
+  const [reminderFrequency, setReminderFrequency] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [reminderDateTime, setReminderDateTime] = useState(getDefaultDateTimeLocal());
+  const [reminderStartDate, setReminderStartDate] = useState(getDefaultDateLocal());
+  const [reminderTime, setReminderTime] = useState(getDefaultTimeLocal());
+  const [reminderDayOfWeek, setReminderDayOfWeek] = useState(getDayOfWeekFromLocalDateTime(getDefaultDateTimeLocal()));
+  const [reminderMessage, setReminderMessage] = useState("Reminder: Mohon isi survey yang sedang berjalan. Terima kasih.");
+  const [reminderLoading, setReminderLoading] = useState(false);
+
+  const [operationFeedback, setOperationFeedback] = useState("");
+
   const activeAdminQuery = useMemo(() => adminEventInput.trim(), [adminEventInput]);
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
-    const result = await fetchSurveyOverview();
+
+    const roleBasedFilter = currentRole === "AdminEvent" && currentUser?.userId
+      ? { assignedAdminId: String(currentUser.userId) }
+      : undefined;
+
+    const result = await fetchSurveyOverview(roleBasedFilter);
     setLoading(false);
+
     if (!result.success) {
       setError(result.message || "Gagal memuat data survey");
       setSurveys([]);
       return;
     }
+
     setError("");
     setSurveys(result.surveys);
-  };
+  }, [currentRole, currentUser]);
 
   useEffect(() => {
     void loadEvents();
-  }, []);
+  }, [loadEvents]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -137,6 +210,14 @@ export default function EventManagementPage() {
 
     return surveys
       .filter((survey) => {
+        if (currentRole === "AdminEvent" && currentUser?.userId) {
+          const currentUserId = String(currentUser.userId);
+          const assignedIds = survey.AssignedAdminIds || [];
+          if (!assignedIds.includes(currentUserId)) {
+            return false;
+          }
+        }
+
         if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
         if (!matchesStatusFilter(survey.Status, statusFilter)) return false;
 
@@ -161,7 +242,35 @@ export default function EventManagementPage() {
         const bDate = new Date(b.UpdatedAt || b.CreatedAt || 0).getTime();
         return bDate - aDate;
       });
-  }, [surveys, periodStart, periodEnd, statusFilter, appliedSearchBy, appliedKeyword]);
+  }, [
+    surveys,
+    currentRole,
+    currentUser,
+    periodStart,
+    periodEnd,
+    statusFilter,
+    appliedSearchBy,
+    appliedKeyword,
+  ]);
+
+  useEffect(() => {
+    if (filteredAndSortedSurveys.length === 0) {
+      setSelectedSurveyId("");
+      return;
+    }
+
+    const exists = filteredAndSortedSurveys.some((item) => item.SurveyId === selectedSurveyId);
+    if (!exists) {
+      setSelectedSurveyId(filteredAndSortedSurveys[0].SurveyId);
+      setGeneratedLink("");
+      setOperationFeedback("");
+    }
+  }, [filteredAndSortedSurveys, selectedSurveyId]);
+
+  const selectedSurvey = useMemo(
+    () => filteredAndSortedSurveys.find((item) => item.SurveyId === selectedSurveyId) || null,
+    [filteredAndSortedSurveys, selectedSurveyId],
+  );
 
   const closeModal = () => {
     setShowCreateModal(false);
@@ -216,7 +325,116 @@ export default function EventManagementPage() {
     await loadEvents();
   };
 
+  const handleGenerateLink = async () => {
+    if (!selectedSurveyId) return;
+    setLinkLoading(true);
+    setOperationFeedback("");
+
+    const result = await generateEventLink(selectedSurveyId, shortenUrl);
+    setLinkLoading(false);
+
+    if (!result.success) {
+      setOperationFeedback(result.message || "Gagal generate link");
+      return;
+    }
+
+    const resolvedLink = result.shortenedLink || result.surveyLink || "";
+    setGeneratedLink(resolvedLink);
+    setOperationFeedback("Link berhasil dibuat");
+  };
+
+  const handleCopyLink = async () => {
+    if (!generatedLink) return;
+    await navigator.clipboard.writeText(generatedLink);
+    setOperationFeedback("Link berhasil disalin");
+  };
+
+  const handleSendBlast = async () => {
+    if (!selectedSurveyId) return;
+
+    let scheduledDate: string | null = null;
+    let frequency: "once" | "daily" | "weekly" | "monthly" = "once";
+    let scheduledTime: string | undefined;
+    let dayOfWeek: number | undefined;
+
+    if (blastMode === "once") {
+      scheduledDate = toIsoString(blastDateTime);
+      dayOfWeek = getDayOfWeekFromLocalDateTime(blastDateTime);
+    } else {
+      scheduledDate = toIsoString(`${blastStartDate}T00:00`);
+      frequency = blastFrequency;
+      scheduledTime = blastTime;
+      dayOfWeek = blastFrequency === "weekly" ? blastDayOfWeek : undefined;
+    }
+
+    if (!scheduledDate || !blastMessage.trim()) {
+      setOperationFeedback("Blast schedule dan message wajib diisi");
+      return;
+    }
+
+    setBlastLoading(true);
+    setOperationFeedback("");
+
+    const result = await scheduleEventBlast({
+      surveyId: selectedSurveyId,
+      scheduledDate,
+      emailTemplate: blastMessage.trim(),
+      embedCover,
+      frequency,
+      scheduledTime,
+      dayOfWeek,
+    });
+
+    setBlastLoading(false);
+    setOperationFeedback(result.success ? "Blast schedule berhasil disimpan" : result.message || "Gagal simpan blast");
+  };
+
+  const handleSendReminder = async () => {
+    if (!selectedSurveyId) return;
+
+    let scheduledDate: string | null = null;
+    let frequency: "once" | "daily" | "weekly" | "monthly" = "once";
+    let scheduledTime: string | undefined;
+    let dayOfWeek: number | undefined;
+
+    if (reminderMode === "once") {
+      scheduledDate = toIsoString(reminderDateTime);
+      dayOfWeek = getDayOfWeekFromLocalDateTime(reminderDateTime);
+    } else {
+      scheduledDate = toIsoString(`${reminderStartDate}T00:00`);
+      frequency = reminderFrequency;
+      scheduledTime = reminderTime;
+      dayOfWeek = reminderFrequency === "weekly" ? reminderDayOfWeek : undefined;
+    }
+
+    if (!scheduledDate || !reminderMessage.trim()) {
+      setOperationFeedback("Reminder schedule dan message wajib diisi");
+      return;
+    }
+
+    setReminderLoading(true);
+    setOperationFeedback("");
+
+    const body = `${reminderRecipients.trim() ? `Recipients: ${reminderRecipients.trim()}\n\n` : ""}${reminderMessage.trim()}`;
+    const result = await scheduleEventReminder({
+      surveyId: selectedSurveyId,
+      scheduledDate,
+      emailTemplate: body,
+      embedCover: false,
+      frequency,
+      scheduledTime,
+      dayOfWeek,
+    });
+
+    setReminderLoading(false);
+    setOperationFeedback(
+      result.success ? "Reminder schedule berhasil disimpan" : result.message || "Gagal simpan reminder",
+    );
+  };
+
   const canCreateEvent = currentRole === "SuperAdmin";
+  const showOperationalPanel = currentRole === "AdminEvent";
+  const showContinueDesign = currentRole === "AdminEvent";
 
   const onApplySearch = () => {
     setAppliedSearchBy(searchBy);
@@ -316,12 +534,13 @@ export default function EventManagementPage() {
                   <th>Periode</th>
                   <th>Status</th>
                   <th>Last Edited</th>
+                  {showContinueDesign ? <th>Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedSurveys.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>Tidak ada data survey</td>
+                    <td colSpan={showContinueDesign ? 6 : 5}>Tidak ada data survey</td>
                   </tr>
                 ) : (
                   filteredAndSortedSurveys.map((row) => (
@@ -335,6 +554,16 @@ export default function EventManagementPage() {
                         </span>
                       </td>
                       <td>{formatLastEdited(row.UpdatedAt, row.CreatedAt)}</td>
+                      {showContinueDesign ? (
+                        <td>
+                          <Link
+                            href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
+                            className={`${styles.btn} ${styles.btnSecondary}`}
+                          >
+                            Continue Design
+                          </Link>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -343,6 +572,360 @@ export default function EventManagementPage() {
           </div>
         ) : null}
       </section>
+
+      {showOperationalPanel ? (
+        <section className={`${styles.panel} ${styles.opsPanel}`}>
+          <div className={styles.opsHero}>
+            <div>
+              <h2 className={styles.panelTitle}>Operational Controls</h2>
+              <p className={styles.opsSubtitle}>Create link distribution, blast schedule, and reminder in one flow.</p>
+            </div>
+            <span className={styles.opsPill}>Send and collect responses</span>
+          </div>
+
+          <div className={styles.opsLayout}>
+            <div className={styles.opsPrimary}>
+              <div className={styles.formGroup}>
+                <label className={styles.label} htmlFor="opsSurveySelect">
+                  Survey
+                </label>
+                <select
+                  id="opsSurveySelect"
+                  className={styles.select}
+                  value={selectedSurveyId}
+                  onChange={(event) => {
+                    setSelectedSurveyId(event.target.value);
+                    setGeneratedLink("");
+                    setOperationFeedback("");
+                  }}
+                >
+                  {filteredAndSortedSurveys.length === 0 ? <option value="">Tidak ada survey</option> : null}
+                  {filteredAndSortedSurveys.map((item) => (
+                    <option key={item.SurveyId} value={item.SurveyId}>
+                      {item.Title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.opsBlock}>
+                <div className={styles.opsBlockHead}>
+                  <h3 className={styles.opsBlockTitle}>Distribution Link</h3>
+                  <label className={styles.inlineCheck}>
+                    <input
+                      type="checkbox"
+                      checked={shortenUrl}
+                      onChange={(event) => setShortenUrl(event.target.checked)}
+                    />
+                    Shorten URL
+                  </label>
+                </div>
+                <div className={styles.linkRowModern}>
+                  <input
+                    className={styles.input}
+                    type="text"
+                    readOnly
+                    value={generatedLink || "Click Generate Link first"}
+                  />
+                  <button
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    type="button"
+                    onClick={handleGenerateLink}
+                    disabled={!selectedSurvey || linkLoading}
+                  >
+                    {linkLoading ? "Generating..." : "Generate Link"}
+                  </button>
+                  <button
+                    className={`${styles.btn} ${styles.btnSecondary}`}
+                    type="button"
+                    onClick={handleCopyLink}
+                    disabled={!generatedLink}
+                  >
+                    Copy link
+                  </button>
+                </div>
+
+                <div className={styles.channelTabs}>
+                  <button
+                    className={`${styles.channelTab} ${channelTab === "invitation" ? styles.channelTabActive : ""}`}
+                    type="button"
+                    onClick={() => setChannelTab("invitation")}
+                  >
+                    Invitation
+                  </button>
+                  <button
+                    className={`${styles.channelTab} ${channelTab === "qr" ? styles.channelTabActive : ""}`}
+                    type="button"
+                    onClick={() => setChannelTab("qr")}
+                  >
+                    QR Code
+                  </button>
+                  <button
+                    className={`${styles.channelTab} ${channelTab === "embed" ? styles.channelTabActive : ""}`}
+                    type="button"
+                    onClick={() => setChannelTab("embed")}
+                  >
+                    Embed
+                  </button>
+                </div>
+
+                <div className={styles.channelPanel}>
+                  {channelTab === "invitation" ? (
+                    <>
+                      <div className={styles.channelTopRow}>
+                        <div className={styles.formGroup}>
+                          <label className={styles.label}>To</label>
+                          <input
+                            className={styles.input}
+                            type="text"
+                            value={reminderRecipients}
+                            onChange={(event) => setReminderRecipients(event.target.value)}
+                            placeholder="People name, Teams group or channel..."
+                          />
+                        </div>
+                        <label className={styles.inlineCheck}>
+                          <input
+                            type="checkbox"
+                            checked={embedCover}
+                            onChange={(event) => setEmbedCover(event.target.checked)}
+                          />
+                          Embed cover
+                        </label>
+                      </div>
+                      <div className={styles.previewCard}>
+                        <div className={styles.previewCover}>Cover image</div>
+                        <h4>{selectedSurvey?.Title || "Survey title"}</h4>
+                        <p>You are invited to complete this survey.</p>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {channelTab === "qr" ? (
+                    <div className={styles.qrPlaceholder}>
+                      <div className={styles.qrBox}>QR</div>
+                      <p>Generate link first, then QR distribution is available.</p>
+                    </div>
+                  ) : null}
+
+                  {channelTab === "embed" ? (
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Embed Snippet</label>
+                      <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        readOnly
+                        value={
+                          generatedLink
+                            ? `<iframe src="${generatedLink}" width="100%" height="720" frameborder="0"></iframe>`
+                            : "Generate link first to get embed snippet."
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.opsSecondary}>
+              <div className={styles.opsBlock}>
+                <h3 className={styles.opsBlockTitle}>Blast Schedule</h3>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Mode</label>
+                  <select
+                    className={styles.select}
+                    value={blastMode}
+                    onChange={(event) => setBlastMode(event.target.value as "once" | "recurring")}
+                  >
+                    <option value="once">Once</option>
+                    <option value="recurring">Recurring</option>
+                  </select>
+                </div>
+
+                {blastMode === "once" ? (
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Date &amp; Time</label>
+                    <input
+                      className={styles.input}
+                      type="datetime-local"
+                      value={blastDateTime}
+                      onChange={(event) => setBlastDateTime(event.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className={styles.scheduleGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Recurring</label>
+                      <select
+                        className={styles.select}
+                        value={blastFrequency}
+                        onChange={(event) => setBlastFrequency(event.target.value as "daily" | "weekly" | "monthly")}
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Start Date</label>
+                      <input
+                        className={styles.input}
+                        type="date"
+                        value={blastStartDate}
+                        onChange={(event) => setBlastStartDate(event.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Time</label>
+                      <input
+                        className={styles.input}
+                        type="time"
+                        value={blastTime}
+                        onChange={(event) => setBlastTime(event.target.value)}
+                      />
+                    </div>
+                    {blastFrequency === "weekly" ? (
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Day of Week</label>
+                        <select
+                          className={styles.select}
+                          value={blastDayOfWeek}
+                          onChange={(event) => setBlastDayOfWeek(Number(event.target.value))}
+                        >
+                          <option value={0}>Sunday</option>
+                          <option value={1}>Monday</option>
+                          <option value={2}>Tuesday</option>
+                          <option value={3}>Wednesday</option>
+                          <option value={4}>Thursday</option>
+                          <option value={5}>Friday</option>
+                          <option value={6}>Saturday</option>
+                        </select>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Message</label>
+                  <textarea
+                    className={styles.textarea}
+                    value={blastMessage}
+                    onChange={(event) => setBlastMessage(event.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <button
+                  className={`${styles.btn} ${styles.btnPrimary} ${styles.blockButton}`}
+                  type="button"
+                  onClick={handleSendBlast}
+                  disabled={!selectedSurvey || blastLoading}
+                >
+                  {blastLoading ? "Sending..." : "Send Blast"}
+                </button>
+              </div>
+
+              <div className={styles.opsBlock}>
+                <h3 className={styles.opsBlockTitle}>Reminder</h3>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Mode</label>
+                  <select
+                    className={styles.select}
+                    value={reminderMode}
+                    onChange={(event) => setReminderMode(event.target.value as "once" | "recurring")}
+                  >
+                    <option value="once">Once</option>
+                    <option value="recurring">Recurring</option>
+                  </select>
+                </div>
+
+                {reminderMode === "once" ? (
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Date &amp; Time</label>
+                    <input
+                      className={styles.input}
+                      type="datetime-local"
+                      value={reminderDateTime}
+                      onChange={(event) => setReminderDateTime(event.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className={styles.scheduleGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Recurring</label>
+                      <select
+                        className={styles.select}
+                        value={reminderFrequency}
+                        onChange={(event) =>
+                          setReminderFrequency(event.target.value as "daily" | "weekly" | "monthly")
+                        }
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Start Date</label>
+                      <input
+                        className={styles.input}
+                        type="date"
+                        value={reminderStartDate}
+                        onChange={(event) => setReminderStartDate(event.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label}>Time</label>
+                      <input
+                        className={styles.input}
+                        type="time"
+                        value={reminderTime}
+                        onChange={(event) => setReminderTime(event.target.value)}
+                      />
+                    </div>
+                    {reminderFrequency === "weekly" ? (
+                      <div className={styles.formGroup}>
+                        <label className={styles.label}>Day of Week</label>
+                        <select
+                          className={styles.select}
+                          value={reminderDayOfWeek}
+                          onChange={(event) => setReminderDayOfWeek(Number(event.target.value))}
+                        >
+                          <option value={0}>Sunday</option>
+                          <option value={1}>Monday</option>
+                          <option value={2}>Tuesday</option>
+                          <option value={3}>Wednesday</option>
+                          <option value={4}>Thursday</option>
+                          <option value={5}>Friday</option>
+                          <option value={6}>Saturday</option>
+                        </select>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Reminder Message</label>
+                  <textarea
+                    className={styles.textarea}
+                    rows={3}
+                    value={reminderMessage}
+                    onChange={(event) => setReminderMessage(event.target.value)}
+                  />
+                </div>
+                <button
+                  className={`${styles.btn} ${styles.btnSecondary} ${styles.blockButton}`}
+                  type="button"
+                  onClick={handleSendReminder}
+                  disabled={!selectedSurvey || reminderLoading}
+                >
+                  {reminderLoading ? "Sending..." : "Send Reminder"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {operationFeedback ? <div className={styles.meta}>{operationFeedback}</div> : null}
+        </section>
+      ) : null}
 
       {showCreateModal ? (
         <div className={styles.modalOverlay} onClick={closeModal} role="presentation">
@@ -471,3 +1054,14 @@ export default function EventManagementPage() {
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
