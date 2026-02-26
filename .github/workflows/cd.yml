@@ -1,14 +1,25 @@
-﻿name: CD
+name: CD
 
 on:
+  release:
+    types: [published]
   push:
-    branches:
-      - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fe-cd-production
+  cancel-in-progress: false
 
 jobs:
   build-and-package:
     runs-on: ubuntu-latest
+    environment:
+      name: production
 
     steps:
       - name: Checkout
