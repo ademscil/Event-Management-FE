@@ -6,7 +6,7 @@
 }
 
 .header {
-  height: 64px;
+  height: 60px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
@@ -81,7 +81,7 @@
 }
 
 .sidebar {
-  width: 240px;
+  width: 227px;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   padding: 16px 0;
