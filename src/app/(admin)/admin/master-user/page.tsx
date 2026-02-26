@@ -19,6 +19,8 @@ import styles from "../page-mockup.module.css";
 
 const ITEMS_PER_PAGE = 10;
 
+type UploadUserError = { row: number; errors: string[] };
+
 function roleLabel(role: string): string {
   switch (role) {
     case "SuperAdmin":
@@ -201,7 +203,7 @@ export default function MasterUserPage() {
     let message = `Upload berhasil! Imported: ${result.imported || 0}, Failed: ${result.failed || 0}`;
     if (result.errors && result.errors.length > 0) {
       message += "\n\nErrors:\n";
-      result.errors.slice(0, 5).forEach((err: any) => {
+      result.errors.slice(0, 5).forEach((err: UploadUserError) => {
         message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
       });
       if (result.errors.length > 5) {
@@ -827,6 +829,8 @@ export default function MasterUserPage() {
     </>
   );
 }
+
+
 
 
 

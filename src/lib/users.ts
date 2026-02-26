@@ -346,7 +346,7 @@ export async function uploadUserFile(file: File): Promise<{
   message?: string;
   imported?: number;
   failed?: number;
-  errors?: Array<{ row: number; data: any; errors: string[] }>;
+  errors?: Array<{ row: number; data: unknown; errors: string[] }>;
 }> {
   const token = getAccessToken();
   if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
@@ -364,7 +364,7 @@ export async function uploadUserFile(file: File): Promise<{
     });
 
     const payload = (await response.json().catch(() => null)) as
-      | { success?: boolean; message?: string; error?: string; imported?: number; failed?: number; errors?: Array<{ row: number; data: any; errors: string[] }> }
+      | { success?: boolean; message?: string; error?: string; imported?: number; failed?: number; errors?: Array<{ row: number; data: unknown; errors: string[] }> }
       | null;
 
     if (!response.ok || !payload?.success) {
@@ -388,3 +388,4 @@ export async function uploadUserFile(file: File): Promise<{
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
+

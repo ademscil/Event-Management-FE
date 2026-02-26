@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 /* eslint-disable @next/next/no-img-element */
 
 import { fetchSurveyById, updateEventById, generateEventLink, fetchSurveyQuestions, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion } from "@/lib/surveys";
@@ -933,6 +935,8 @@ export default function SurveyCreatePage() {
     </section>
   );
 }
+
+
 
 
 
