@@ -1,7 +1,7 @@
 "use client";
 
 import { getAccessToken } from "@/lib/auth";
-import type { SurveyConfiguration, SurveyDetail, SurveyOverviewItem } from "@/types/survey";
+import type { SurveyConfiguration, SurveyDetail, SurveyOverviewItem, SurveyQuestion } from "@/types/survey";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 const EVENTS_ENDPOINT = `${API_BASE_PATH}/events`;
@@ -125,8 +125,8 @@ export async function fetchSurveyOverview(filter?: {
 export async function createEventDraft(input: {
   title: string;
   description?: string;
-  startDate: string;
-  endDate: string;
+  startDate?: string;
+  endDate?: string;
   assignedAdminId?: string;
   targetRespondents?: number;
   targetScore?: number;
@@ -327,11 +327,11 @@ export async function updateEventById(
   input: {
     title: string;
     description?: string;
-    startDate: string;
-    endDate: string;
+    startDate?: string;
+    endDate?: string;
     status: string;
-    targetRespondents?: number | null;
-    targetScore?: number | null;
+    targetRespondents?: number;
+    targetScore?: number;
   },
 ): Promise<{ success: boolean; message?: string }> {
   const token = getAccessToken();
@@ -340,15 +340,24 @@ export async function updateEventById(
   }
 
   try {
-    const payload = {
+        const payload: Record<string, unknown> = {
       title: input.title,
       description: input.description || "",
-      startDate: input.startDate,
-      endDate: input.endDate,
       status: input.status,
-      targetRespondents: input.targetRespondents ?? null,
-      targetScore: input.targetScore ?? null,
     };
+
+    if (input.startDate !== undefined) {
+      payload.startDate = input.startDate;
+    }
+    if (input.endDate !== undefined) {
+      payload.endDate = input.endDate;
+    }
+    if (input.targetRespondents !== undefined) {
+      payload.targetRespondents = input.targetRespondents;
+    }
+    if (input.targetScore !== undefined) {
+      payload.targetScore = input.targetScore;
+    }
 
     const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}`, {
       method: "PUT",
@@ -399,3 +408,143 @@ export async function updateEventConfiguration(
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
+
+export interface SurveyQuestionPayload {
+  surveyId: string;
+  type: string;
+  promptText: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+  isMandatory?: boolean;
+  displayOrder?: number;
+  pageNumber?: number;
+  layoutOrientation?: "vertical" | "horizontal";
+  options?: unknown;
+  commentRequiredBelowRating?: number | null;
+  createdBy: string;
+}
+
+export async function fetchSurveyQuestions(
+  surveyId: string,
+): Promise<{ success: boolean; questions: SurveyQuestion[]; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, questions: [], message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/questions/survey/${surveyId}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | { success?: boolean; questions?: SurveyQuestion[]; message?: string; error?: string }
+      | null;
+
+    if (!response.ok || !body?.success) {
+      return { success: false, questions: [], message: getErrorMessage(body, "Gagal memuat pertanyaan") };
+    }
+
+    return { success: true, questions: Array.isArray(body.questions) ? body.questions : [] };
+  } catch {
+    return { success: false, questions: [], message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function createSurveyQuestion(
+  payload: SurveyQuestionPayload,
+): Promise<{ success: boolean; question?: SurveyQuestion; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/questions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | { success?: boolean; question?: SurveyQuestion; message?: string; error?: string }
+      | null;
+
+    if (!response.ok || !body?.success || !body.question) {
+      return { success: false, message: getErrorMessage(body, "Gagal menambah pertanyaan") };
+    }
+
+    return { success: true, question: body.question };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function updateSurveyQuestion(
+  questionId: string,
+  payload: Partial<SurveyQuestionPayload> & { updatedBy?: string },
+): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/questions/${questionId}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || body?.success !== true) {
+      return { success: false, message: getErrorMessage(body, "Gagal mengubah pertanyaan") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function deleteSurveyQuestion(
+  questionId: string,
+): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/questions/${questionId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || body?.success !== true) {
+      return { success: false, message: getErrorMessage(body, "Gagal menghapus pertanyaan") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+
+
+
+

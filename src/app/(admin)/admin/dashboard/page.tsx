@@ -6,6 +6,7 @@ import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
+import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
 
 function formatPeriod(startDate: string, endDate: string): string {
@@ -45,8 +46,8 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [currentRole] = useState<UserRole | null>(() => getCurrentUser()?.role ?? null);
 
-  const [periodStart, setPeriodStart] = useState("2026-01-01");
-  const [periodEnd, setPeriodEnd] = useState("2026-12-31");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [searchBy, setSearchBy] = useState("all");
@@ -141,16 +142,16 @@ export default function DashboardPage() {
         <div className={styles.periodRow}>
           <div className={styles.periodLabel}>STATUS</div>
           <div className={styles.periodColon}>:</div>
-          <select
-            id="status"
+          <Dropdown
             className={`${styles.select} ${styles.statusControl}`}
+            options={[
+              { value: "all", label: "All" },
+              { value: "active", label: "Active" },
+              { value: "closed", label: "Closed" },
+            ]}
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-          </select>
+            onChange={setStatusFilter}
+          />
         </div>
         <SearchBar
           rowClassName={styles.masterSearchRow}

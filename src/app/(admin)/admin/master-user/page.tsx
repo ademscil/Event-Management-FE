@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { createUser, downloadUserTemplateFile, fetchUsersWithFilters, setUserPassword, toggleUserLdap, updateUser } from "@/lib/users";
+import { createUser, downloadUserList, downloadUserTemplateFile, fetchUsersWithFilters, setUserPassword, toggleUserLdap, updateUser, uploadUserFile } from "@/lib/users";
 import {
   fetchOrgHierarchy,
   type BusinessUnitOption,
@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pagination } from "@/components/admin/pagination";
 import { SearchBar } from "@/components/admin/search-bar";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
 
 const ITEMS_PER_PAGE = 10;
@@ -178,7 +179,7 @@ export default function MasterUserPage() {
     }
   }, [departments, filteredDepartments, newDivisionId, newDepartmentId]);
 
-  const onUpload = () => {
+  const onUpload = async () => {
     const fileInput = document.getElementById("master-user-file") as HTMLInputElement | null;
     const file = fileInput?.files?.[0];
     if (!file) {
@@ -190,7 +191,27 @@ export default function MasterUserPage() {
       window.alert("Format file harus Excel (.xlsx atau .xls).");
       return;
     }
-    window.alert("Fitur upload master user akan dihubungkan ke backend pada step berikutnya.");
+
+    const result = await uploadUserFile(file);
+    if (!result.success) {
+      window.alert(result.message || "Gagal upload file");
+      return;
+    }
+
+    let message = `Upload berhasil! Imported: ${result.imported || 0}, Failed: ${result.failed || 0}`;
+    if (result.errors && result.errors.length > 0) {
+      message += "\n\nErrors:\n";
+      result.errors.slice(0, 5).forEach((err: any) => {
+        message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
+      });
+      if (result.errors.length > 5) {
+        message += `... dan ${result.errors.length - 5} error lainnya`;
+      }
+    }
+    window.alert(message);
+    setSelectedFileName("No file chosen");
+    if (fileInput) fileInput.value = "";
+    await loadUsers(appliedKeyword);
   };
 
   const onPickFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
@@ -217,8 +238,21 @@ export default function MasterUserPage() {
     })();
   };
 
-  const onDownload = () => {
-    window.alert("Download data user akan dihubungkan pada step berikutnya.");
+  const onDownload = async () => {
+    const result = await downloadUserList();
+    if (!result.success || !result.blob) {
+      window.alert(result.message || "Gagal download user list");
+      return;
+    }
+
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.filename || "user-list.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const displayedUsers = useMemo(() => {
@@ -421,46 +455,48 @@ export default function MasterUserPage() {
           <div className={styles.periodRow}>
             <div className={styles.periodLabel}>ROLE</div>
             <div className={styles.periodColon}>:</div>
-            <select
+            <Dropdown
               className={`${styles.select} ${styles.statusControl}`}
+              options={[
+                { value: "all", label: "All Roles" },
+                { value: "SuperAdmin", label: "Super Admin" },
+                { value: "AdminEvent", label: "Admin Event" },
+                { value: "ITLead", label: "IT Lead" },
+                { value: "DepartmentHead", label: "Dept Head" },
+              ]}
               value={roleFilter}
-              onChange={(event) => setRoleFilter(event.target.value)}
-            >
-              <option value="all">All Roles</option>
-              <option value="SuperAdmin">Super Admin</option>
-              <option value="AdminEvent">Admin Event</option>
-              <option value="ITLead">IT Lead</option>
-              <option value="DepartmentHead">Dept Head</option>
-            </select>
+              onChange={setRoleFilter}
+            />
           </div>
           <div className={styles.periodRow}>
             <div className={styles.periodLabel}>DEPARTMENT</div>
             <div className={styles.periodColon}>:</div>
-            <select
+            <Dropdown
               className={`${styles.select} ${styles.statusControl}`}
+              options={[
+                { value: "all", label: "All Departments" },
+                ...filterDepartments.map((department) => ({
+                  value: department.DepartmentId,
+                  label: department.Name,
+                })),
+              ]}
               value={departmentFilter}
-              onChange={(event) => setDepartmentFilter(event.target.value)}
-            >
-              <option value="all">All Departments</option>
-              {filterDepartments.map((department) => (
-                <option key={department.DepartmentId} value={department.DepartmentId}>
-                  {department.Name}
-                </option>
-              ))}
-            </select>
+              onChange={setDepartmentFilter}
+            />
           </div>
           <div className={styles.periodRow}>
             <div className={styles.periodLabel}>STATUS</div>
             <div className={styles.periodColon}>:</div>
-            <select
+            <Dropdown
               className={`${styles.select} ${styles.statusControl}`}
+              options={[
+                { value: "all", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ]}
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
+              onChange={setStatusFilter}
+            />
           </div>
           <SearchBar
             rowClassName={styles.masterSearchRow}
@@ -674,66 +710,76 @@ export default function MasterUserPage() {
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Role</label>
-                  <select className={styles.select} value={newRole} onChange={(e) => setNewRole(e.target.value as typeof newRole)}>
-                    <option value="SuperAdmin">Super Admin</option>
-                    <option value="AdminEvent">Admin Event</option>
-                    <option value="ITLead">IT Lead</option>
-                    <option value="DepartmentHead">Dept Head</option>
-                  </select>
+                  <Dropdown
+                    className={styles.select}
+                    options={[
+                      { value: "SuperAdmin", label: "Super Admin" },
+                      { value: "AdminEvent", label: "Admin Event" },
+                      { value: "ITLead", label: "IT Lead" },
+                      { value: "DepartmentHead", label: "Dept Head" },
+                    ]}
+                    value={newRole}
+                    onChange={(value) => setNewRole(value as typeof newRole)}
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Business Unit</label>
-                  <select
+                  <Dropdown
                     className={styles.select}
+                    options={[
+                      { value: "", label: "Pilih Business Unit" },
+                      ...businessUnits.map((businessUnit) => ({
+                        value: businessUnit.BusinessUnitId,
+                        label: businessUnit.Name,
+                      })),
+                    ]}
                     value={newBusinessUnitId}
-                    onChange={(e) => setNewBusinessUnitId(e.target.value)}
-                  >
-                    <option value="">Pilih Business Unit</option>
-                    {businessUnits.map((businessUnit) => (
-                      <option key={businessUnit.BusinessUnitId} value={businessUnit.BusinessUnitId}>
-                        {businessUnit.Name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setNewBusinessUnitId}
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Divisi</label>
-                  <select
+                  <Dropdown
                     className={styles.select}
+                    options={[
+                      { value: "", label: "Pilih Divisi" },
+                      ...filteredDivisions.map((division) => ({
+                        value: division.DivisionId,
+                        label: division.Name,
+                      })),
+                    ]}
                     value={newDivisionId}
-                    onChange={(e) => setNewDivisionId(e.target.value)}
+                    onChange={setNewDivisionId}
                     disabled={!newBusinessUnitId}
-                  >
-                    <option value="">Pilih Divisi</option>
-                    {filteredDivisions.map((division) => (
-                      <option key={division.DivisionId} value={division.DivisionId}>
-                        {division.Name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Department</label>
-                  <select
+                  <Dropdown
                     className={styles.select}
+                    options={[
+                      { value: "", label: "Pilih Department" },
+                      ...filteredDepartments.map((department) => ({
+                        value: department.DepartmentId,
+                        label: department.Name,
+                      })),
+                    ]}
                     value={newDepartmentId}
-                    onChange={(e) => setNewDepartmentId(e.target.value)}
+                    onChange={setNewDepartmentId}
                     disabled={!newDivisionId}
-                  >
-                    <option value="">Pilih Department</option>
-                    {filteredDepartments.map((department) => (
-                      <option key={department.DepartmentId} value={department.DepartmentId}>
-                        {department.Name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Status</label>
-                  <select className={styles.select} value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                  <Dropdown
+                    className={styles.select}
+                    options={[
+                      { value: "Active", label: "Active" },
+                      { value: "Inactive", label: "Inactive" },
+                    ]}
+                    value={newStatus}
+                    onChange={setNewStatus}
+                  />
                 </div>
                 {!newUseLdap ? (
                   <div className={styles.formGroup}>

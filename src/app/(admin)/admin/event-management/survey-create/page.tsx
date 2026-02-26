@@ -1,17 +1,23 @@
-﻿"use client";
+"use client";
 
 /* eslint-disable @next/next/no-img-element */
 
-import { fetchSurveyById, updateEventById } from "@/lib/surveys";
+import { fetchSurveyById, updateEventById, generateEventLink, fetchSurveyQuestions, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion } from "@/lib/surveys";
+import { fetchOrgHierarchy, type BusinessUnitOption, type DivisionOption, type DepartmentOption } from "@/lib/org-hierarchy";
 import type { SurveyQuestion } from "@/types/survey";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
+import type { DragEvent } from "react";
 import styles from "./survey-create.module.css";
+import SurveyPreviewElement from "@/components/survey/survey-preview-element";
 
 type ElementType = "hero" | "text" | "choice" | "checkbox" | "dropdown" | "rating" | "likert" | "matrix" | "date" | "signature";
 
 type FontPreset = "default" | "georgia" | "trebuchet" | "verdana" | "tahoma" | "courier";
+
+type DataSourceType = "manual" | "bu" | "division" | "department";
 
 interface BuilderElement {
   id: string;
@@ -21,6 +27,7 @@ interface BuilderElement {
   required: boolean;
   options: string[];
   coverUrl: string;
+  dataSource?: DataSourceType;
 }
 
 interface BuilderPage {
@@ -50,16 +57,16 @@ const FONT_MAP: Record<FontPreset, string> = {
 };
 
 const ELEMENTS: Array<{ type: ElementType; label: string; icon: string }> = [
-  { type: "hero", label: "Hero Cover", icon: "\u25A8" },
+  { type: "hero", label: "Hero Cover", icon: "\u{1F5BC}\uFE0F" },
   { type: "text", label: "Text Input", icon: "T" },
   { type: "choice", label: "Multiple Choice", icon: "\u25CF" },
   { type: "checkbox", label: "Checkboxes", icon: "\u2611" },
   { type: "dropdown", label: "Dropdown", icon: "\u25BE" },
   { type: "rating", label: "Rating", icon: "\u2605" },
-  { type: "likert", label: "Likert Scale", icon: "\u2261" },
-  { type: "matrix", label: "Matrix", icon: "\u229E" },
-  { type: "date", label: "Date", icon: "\u25F7" },
-  { type: "signature", label: "Signature", icon: "\u270E" },
+  { type: "likert", label: "Likert Scale", icon: "\u{1F4CA}" },
+  { type: "matrix", label: "Matrix", icon: "\u29DE" },
+  { type: "date", label: "Date", icon: "\u{1F4C5}" },
+  { type: "signature", label: "Signature", icon: "\u270D\uFE0F" },
 ];
 
 function toDateInput(value?: string | null): string {
@@ -81,6 +88,22 @@ function mapType(value: string): ElementType {
   return "text";
 }
 
+function toApiType(value: ElementType): string {
+  if (value === "hero") return "HeroCover";
+  if (value === "choice") return "MultipleChoice";
+  if (value === "checkbox") return "Checkbox";
+  if (value === "dropdown") return "Dropdown";
+  if (value === "rating") return "Rating";
+  if (value === "likert" || value === "matrix") return "MatrixLikert";
+  if (value === "date") return "Date";
+  if (value === "signature") return "Signature";
+  return "Text";
+}
+
+function extractQuestionId(builderId: string): string | null {
+  if (!builderId.startsWith("q-")) return null;
+  return builderId.slice(2);
+}
 function parseOptions(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map((v) => String(v));
   if (raw && typeof raw === "object") {
@@ -109,8 +132,83 @@ function toPages(questions?: SurveyQuestion[]): BuilderPage[] {
   return Array.from(map.entries()).sort(([a],[b])=>a-b).map(([id,elements]) => ({ id, title: id===1?"Welcome":`Page ${id}`, elements }));
 }
 
-function newElement(type: ElementType, id: number): BuilderElement {
-  return { id: `new-${id}`, type, title: type === "hero" ? "Hero title" : "Question", subtitle: "", required: false, options: ["Option 1"], coverUrl: "" };
+function buildTempElementId(counter: number): string {
+  return `new-${counter}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getMaxTempElementCounter(pages: BuilderPage[]): number {
+  let max = 0;
+  pages.forEach((page) => {
+    page.elements.forEach((element) => {
+      const match = element.id.match(/^new-(\d+)/);
+      if (match) {
+        const value = Number(match[1]);
+        if (!Number.isNaN(value)) {
+          max = Math.max(max, value);
+        }
+      }
+    });
+  });
+  return max;
+}
+
+function ensureUniqueElementIds(pages: BuilderPage[]): BuilderPage[] {
+  const seen = new Set<string>();
+  let duplicateCounter = 0;
+
+  return pages.map((page) => ({
+    ...page,
+    elements: page.elements.map((element) => {
+      if (!seen.has(element.id)) {
+        seen.add(element.id);
+        return element;
+      }
+
+      duplicateCounter += 1;
+      const nextId = buildTempElementId(100000 + duplicateCounter);
+      seen.add(nextId);
+      return { ...element, id: nextId };
+    }),
+  }));
+}
+
+function normalizePagesForState(pages: BuilderPage[]): { pages: BuilderPage[]; changed: boolean } {
+  let changed = false;
+
+  const normalized = pages.map((page) => {
+    const seen = new Set<string>();
+    let duplicateCounter = 0;
+
+    const elements = page.elements.map((element) => {
+      if (!seen.has(element.id)) {
+        seen.add(element.id);
+        return element;
+      }
+
+      duplicateCounter += 1;
+      changed = true;
+      const nextId = buildTempElementId(200000 + duplicateCounter);
+      seen.add(nextId);
+      return { ...element, id: nextId };
+    });
+
+    return { ...page, elements };
+  });
+
+  return { pages: normalized, changed };
+}
+
+function newElement(type: ElementType, tempId: string): BuilderElement {
+  return {
+    id: tempId,
+    type,
+    title: type === "hero" ? "Hero title" : "Question",
+    subtitle: "",
+    required: false,
+    options: ["Option 1"],
+    coverUrl: "",
+    dataSource: "manual",
+  };
 }
 
 function getCorpTemplatePages(): BuilderPage[] {
@@ -148,14 +246,22 @@ function getCorpTemplatePages(): BuilderPage[] {
   ];
 }
 
+function isAutoTitle(title: string, id: number): boolean {
+  return title === `Page ${id}`;
+}
+
 export default function SurveyCreatePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const surveyId = searchParams.get("surveyId") || "";
   const draftKey = useMemo(() => `survey_draft_${surveyId}`, [surveyId]);
+  const currentUser = getCurrentUser();
+  const currentUserId = currentUser?.userId ? String(currentUser.userId) : "";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [shareLink, setShareLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
@@ -169,6 +275,8 @@ export default function SurveyCreatePage() {
   const [pages, setPages] = useState<BuilderPage[]>([]);
   const [pageCounter, setPageCounter] = useState(0);
   const [elementCounter, setElementCounter] = useState(0);
+  const [draggingPageId, setDraggingPageId] = useState<number | null>(null);
+  const [dragOverPageId, setDragOverPageId] = useState<number | null>(null);
 
   const [logo, setLogo] = useState("");
   const [bgColor, setBgColor] = useState("#f5f5f5");
@@ -178,6 +286,59 @@ export default function SurveyCreatePage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showStyle, setShowStyle] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({});
+
+  const [orgBusinessUnits, setOrgBusinessUnits] = useState<BusinessUnitOption[]>([]);
+  const [orgDivisions, setOrgDivisions] = useState<DivisionOption[]>([]);
+  const [orgDepartments, setOrgDepartments] = useState<DepartmentOption[]>([]);
+
+  const onPageDragStart = (pageId: number) => (event: DragEvent) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(pageId));
+    setDraggingPageId(pageId);
+  };
+
+  const onPageDragEnd = () => {
+    setDraggingPageId(null);
+    setDragOverPageId(null);
+  };
+
+  const onPageDragOver = (pageId: number) => (event: DragEvent) => {
+    event.preventDefault();
+    if (pageId !== dragOverPageId) {
+      setDragOverPageId(pageId);
+    }
+  };
+
+  const onPageDrop = (pageId: number) => (event: DragEvent) => {
+    event.preventDefault();
+    const sourceIdRaw = event.dataTransfer.getData("text/plain");
+    const sourceId = sourceIdRaw ? Number(sourceIdRaw) : draggingPageId;
+    if (!sourceId || sourceId === pageId) {
+      setDragOverPageId(null);
+      return;
+    }
+
+    setPages((prev) => {
+      const sourceIndex = prev.findIndex((p) => p.id === sourceId);
+      const targetIndex = prev.findIndex((p) => p.id === pageId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next.map((page, index) => {
+        const newId = index + 1;
+        return {
+          ...page,
+          id: newId,
+          title: isAutoTitle(page.title, page.id) ? `Page ${newId}` : page.title,
+        };
+      });
+    });
+
+    setDraggingPageId(null);
+    setDragOverPageId(null);
+  };
 
   useEffect(() => {
     const run = async () => {
@@ -213,7 +374,10 @@ export default function SurveyCreatePage() {
           setTargetScore(draft.targetScore || "");
           setScheduleStart(draft.scheduleStart || toDateInput(detail.StartDate));
           setScheduleEnd(draft.scheduleEnd || toDateInput(detail.EndDate));
-          setPages(Array.isArray(draft.pages) ? draft.pages : []);
+          const draftPages = ensureUniqueElementIds(Array.isArray(draft.pages) ? draft.pages : []);
+          setPages(draftPages);
+          setPageCounter(draftPages.length ? Math.max(...draftPages.map((p) => p.id)) : 0);
+          setElementCounter(getMaxTempElementCounter(draftPages));
           setLogo(draft.style?.logo || "");
           setBgColor(draft.style?.backgroundColor || "#f5f5f5");
           setBgImage(draft.style?.backgroundImage || "");
@@ -230,19 +394,40 @@ export default function SurveyCreatePage() {
         (detail.Title || "").toLowerCase().includes("corp it") &&
         (detail.Title || "").toLowerCase().includes("bpm")
       ) {
-        const templatePages = getCorpTemplatePages();
+        const templatePages = ensureUniqueElementIds(getCorpTemplatePages());
         setPages(templatePages);
-        setPageCounter(templatePages.length);
-        setElementCounter(2);
+        setPageCounter(templatePages.length ? Math.max(...templatePages.map((p) => p.id)) : 0);
+        setElementCounter(getMaxTempElementCounter(templatePages));
         return;
       }
 
-      setPages(fromDb);
-      setPageCounter(fromDb.length ? Math.max(...fromDb.map((p) => p.id)) : 0);
+      const normalizedPages = ensureUniqueElementIds(fromDb);
+      setPages(normalizedPages);
+      setPageCounter(normalizedPages.length ? Math.max(...normalizedPages.map((p) => p.id)) : 0);
+      setElementCounter(getMaxTempElementCounter(normalizedPages));
     };
 
     void run();
   }, [draftKey, surveyId]);
+
+  useEffect(() => {
+    const run = async () => {
+      const result = await fetchOrgHierarchy();
+      if (!result.success) return;
+      setOrgBusinessUnits(result.businessUnits);
+      setOrgDivisions(result.divisions);
+      setOrgDepartments(result.departments);
+    };
+
+    void run();
+  }, []);
+
+  useEffect(() => {
+    const normalized = normalizePagesForState(pages);
+    if (normalized.changed) {
+      setPages(normalized.pages);
+    }
+  }, [pages]);
 
   const scheduleSummary = useMemo(() => {
     if (!scheduleStart || !scheduleEnd) return "Period not set";
@@ -251,6 +436,37 @@ export default function SurveyCreatePage() {
 
   const styleSummary = useMemo(() => `Logo: ${logo ? "On" : "Off"} | Background: ${bgColor} | Font: ${font === "default" ? "Default" : font}`, [bgColor, font, logo]);
 
+  const allBuilderElements = useMemo(() => pages.flatMap((page) => page.elements), [pages]);
+
+  const applyMasterDataSource = (source: DataSourceType, element: BuilderElement): BuilderElement => {
+    if (source === "bu") {
+      return {
+        ...element,
+        dataSource: source,
+        options: orgBusinessUnits.map((item) => item.Name),
+      };
+    }
+    if (source === "division") {
+      return {
+        ...element,
+        dataSource: source,
+        options: orgDivisions.map((item) => item.Name),
+      };
+    }
+    if (source === "department") {
+      return {
+        ...element,
+        dataSource: source,
+        options: orgDepartments.map((item) => item.Name),
+      };
+    }
+    return {
+      ...element,
+      dataSource: "manual",
+      options: element.options.length > 0 ? element.options : ["Option 1"],
+    };
+  };
+
   const addPage = () => {
     const next = pageCounter + 1;
     setPageCounter(next);
@@ -258,11 +474,135 @@ export default function SurveyCreatePage() {
   };
 
   const addElement = (pageId: number, type: ElementType) => {
-    const next = elementCounter + 1;
-    setElementCounter(next);
-    setPages((prev) => prev.map((p) => (p.id === pageId ? { ...p, elements: [...p.elements, newElement(type, next)] } : p)));
+    const nextCounter = elementCounter + 1;
+    const tempId = buildTempElementId(nextCounter);
+
+    setElementCounter(nextCounter);
+    setPages((prevPages) =>
+      prevPages.map((page) =>
+        page.id === pageId
+          ? { ...page, elements: [...page.elements, newElement(type, tempId)] }
+          : page,
+      ),
+    );
   };
 
+  const isQuestionImmutableError = (message: string): boolean => {
+    const value = message.toLowerCase();
+    return value.includes("has responses") || value.includes("cannot modify question");
+  };
+  const syncQuestionsToServer = async (): Promise<boolean> => {
+    if (!currentUserId) {
+      setError("User login tidak valid untuk sinkronisasi draft");
+      return false;
+    }
+
+    const remote = await fetchSurveyQuestions(surveyId);
+    if (!remote.success) {
+      setError(remote.message || "Gagal membaca pertanyaan dari server");
+      return false;
+    }
+
+    const remoteById = new Map(remote.questions.map((q) => [q.QuestionId, q]));
+    const keptIds = new Set<string>();
+    const idRemap = new Map<string, string>();
+
+    const flat: Array<{ pageNumber: number; displayOrder: number; element: BuilderElement }> = [];
+    let order = 1;
+    pages.forEach((page, pageIndex) => {
+      page.elements.forEach((element) => {
+        flat.push({ pageNumber: pageIndex + 1, displayOrder: order, element });
+        order += 1;
+      });
+    });
+
+    for (const item of flat) {
+      const questionId = extractQuestionId(item.element.id);
+      const payload = {
+        surveyId,
+        type: toApiType(item.element.type),
+        promptText: item.element.title || "Untitled Question",
+        subtitle: item.element.subtitle || null,
+        imageUrl: item.element.type === "hero" ? item.element.coverUrl || null : null,
+        isMandatory: item.element.required,
+        displayOrder: item.displayOrder,
+        pageNumber: item.pageNumber,
+        layoutOrientation: "vertical" as const,
+        options: ["choice", "checkbox", "dropdown"].includes(item.element.type)
+          ? { options: item.element.options, dataSource: item.element.dataSource || "manual" }
+          : ["likert", "matrix"].includes(item.element.type)
+            ? item.element.options
+            : null,
+      };
+
+      if (questionId && remoteById.has(questionId)) {
+        const updated = await updateSurveyQuestion(questionId, {
+          ...payload,
+          updatedBy: currentUserId,
+        });
+        if (!updated.success) {
+          if (isQuestionImmutableError(updated.message || "")) {
+            setMessage("Survey sudah memiliki respons. Perubahan pertanyaan tidak dapat disimpan, hanya pengaturan event yang diperbarui.");
+            return true;
+          }
+
+          setError(updated.message || "Gagal memperbarui pertanyaan");
+          return false;
+        }
+        keptIds.add(questionId);
+      } else {
+        const created = await createSurveyQuestion({
+          ...payload,
+          createdBy: currentUserId,
+        });
+        if (!created.success || !created.question) {
+          if (isQuestionImmutableError(created.message || "")) {
+            setMessage("Survey sudah memiliki respons. Perubahan pertanyaan tidak dapat disimpan, hanya pengaturan event yang diperbarui.");
+            return true;
+          }
+
+          setError(created.message || "Gagal menambah pertanyaan");
+          return false;
+        }
+        keptIds.add(created.question.QuestionId);
+        idRemap.set(item.element.id, `q-${created.question.QuestionId}`);
+      }
+    }
+
+    const deleteWarnings: string[] = [];
+    for (const question of remote.questions) {
+      if (keptIds.has(question.QuestionId)) continue;
+      const removed = await deleteSurveyQuestion(question.QuestionId);
+      if (!removed.success) {
+        const message = (removed.message || "").toLowerCase();
+        if (isQuestionImmutableError(message)) {
+          deleteWarnings.push("Beberapa pertanyaan tidak bisa dihapus karena survey sudah memiliki respons.");
+          continue;
+        }
+
+        setError(removed.message || "Gagal menghapus pertanyaan yang sudah dihapus dari builder");
+        return false;
+      }
+    }
+
+    if (deleteWarnings.length > 0) {
+      setMessage(deleteWarnings[0]);
+    }
+
+    if (idRemap.size > 0) {
+      setPages((prev) =>
+        prev.map((page) => ({
+          ...page,
+          elements: page.elements.map((element) => ({
+            ...element,
+            id: idRemap.get(element.id) || element.id,
+          })),
+        })),
+      );
+    }
+
+    return true;
+  };
   const saveDraft = async () => {
     const payload: DraftPayload = {
       surveyTitle,
@@ -277,16 +617,34 @@ export default function SurveyCreatePage() {
 
     localStorage.setItem(draftKey, JSON.stringify(payload));
 
-    setSaving(true);
-    const update = await updateEventById(surveyId, {
+    const synced = await syncQuestionsToServer();
+    if (!synced) {
+      return;
+    }
+
+        const parsedTargetRespondents =
+      targetRespondents.trim() === "" ? undefined : Number(targetRespondents);
+    const parsedTargetScore =
+      targetScore.trim() === "" ? undefined : Number(targetScore);
+
+    const updatePayload: Parameters<typeof updateEventById>[1] = {
       title: surveyTitle || "Untitled Survey",
       description: surveyDesc,
-      startDate: new Date(scheduleStart || new Date().toISOString()).toISOString(),
-      endDate: new Date(scheduleEnd || new Date().toISOString()).toISOString(),
       status: "Draft",
-      targetRespondents: targetRespondents ? Number(targetRespondents) : null,
-      targetScore: targetScore ? Number(targetScore) : null,
-    });
+      targetRespondents: Number.isFinite(parsedTargetRespondents)
+        ? parsedTargetRespondents
+        : undefined,
+      targetScore: Number.isFinite(parsedTargetScore) ? parsedTargetScore : undefined,
+    };
+    if (scheduleStart) {
+      updatePayload.startDate = new Date(`${scheduleStart}T00:00:00`).toISOString();
+    }
+    if (scheduleEnd) {
+      updatePayload.endDate = new Date(`${scheduleEnd}T00:00:00`).toISOString();
+    }
+
+    setSaving(true);
+    const update = await updateEventById(surveyId, updatePayload);
     setSaving(false);
 
     if (!update.success) {
@@ -304,15 +662,34 @@ export default function SurveyCreatePage() {
     }
 
     setPublishing(true);
-    const update = await updateEventById(surveyId, {
+
+    const synced = await syncQuestionsToServer();
+    if (!synced) {
+      setPublishing(false);
+      return;
+    }
+        const parsedTargetRespondents =
+      targetRespondents.trim() === "" ? undefined : Number(targetRespondents);
+    const parsedTargetScore =
+      targetScore.trim() === "" ? undefined : Number(targetScore);
+
+    const updatePayload: Parameters<typeof updateEventById>[1] = {
       title: surveyTitle || "Untitled Survey",
       description: surveyDesc,
-      startDate: new Date(scheduleStart || new Date().toISOString()).toISOString(),
-      endDate: new Date(scheduleEnd || new Date().toISOString()).toISOString(),
-      status: "In Design",
-      targetRespondents: targetRespondents ? Number(targetRespondents) : null,
-      targetScore: targetScore ? Number(targetScore) : null,
-    });
+      status: "Active",
+      targetRespondents: Number.isFinite(parsedTargetRespondents)
+        ? parsedTargetRespondents
+        : undefined,
+      targetScore: Number.isFinite(parsedTargetScore) ? parsedTargetScore : undefined,
+    };
+    if (scheduleStart) {
+      updatePayload.startDate = new Date(`${scheduleStart}T00:00:00`).toISOString();
+    }
+    if (scheduleEnd) {
+      updatePayload.endDate = new Date(`${scheduleEnd}T00:00:00`).toISOString();
+    }
+
+    const update = await updateEventById(surveyId, updatePayload);
     setPublishing(false);
 
     if (!update.success) {
@@ -320,7 +697,7 @@ export default function SurveyCreatePage() {
       return;
     }
 
-    setMessage("Survey dipublish menjadi In Design");
+    router.push(`/admin/event-management/${surveyId}/operations`);
   };
 
   const onFile = (file: File | undefined, setter: (value: string) => void) => {
@@ -330,12 +707,28 @@ export default function SurveyCreatePage() {
     reader.readAsDataURL(file);
   };
 
+  const setPreviewValue = (id: string, value: unknown) => {
+    setPreviewValues((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const setPreviewValuesBulk = (nextValues: Record<string, unknown>) => {
+    setPreviewValues((prev) => ({ ...prev, ...nextValues }));
+  };
+
+  const togglePreviewCheckbox = (id: string, option: string) => {
+    setPreviewValues((prev) => {
+      const current = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
+      const next = current.includes(option) ? current.filter((item) => item !== option) : [...current, option];
+      return { ...prev, [id]: next };
+    });
+  };
+
   if (loading) return <section className={styles.loading}>Memuat survey builder...</section>;
 
   return (
     <section className={styles.wrapper}>
       {error ? <div className={styles.alertError}>{error}</div> : null}
-      {message ? <div className={styles.alertSuccess}>{message}</div> : null}
+      {message ? <div className={styles.alertSuccess}>{message}{shareLink ? (<div className={styles.shareRow}><span className={styles.shareLabel}>Share link:</span><button type="button" className={styles.copyButton} onClick={() => navigator.clipboard.writeText(shareLink)}>Copy</button><a className={styles.shareLink} href={shareLink} target="_blank" rel="noreferrer">{shareLink}</a></div>) : null}</div> : null}
 
       <div className={styles.builder}>
         <aside className={styles.builderSidebar}>
@@ -405,14 +798,14 @@ export default function SurveyCreatePage() {
               {pages.length === 0 ? <div className={styles.emptyPage}>No pages yet. Use Add Page to get started.</div> : null}
 
               {pages.map((page) => (
-                <article key={page.id} className={styles.pageCard}>
+                <article key={page.id} className={[styles.pageCard, draggingPageId === page.id ? styles.pageCardDragging : "", dragOverPageId === page.id && draggingPageId !== page.id ? styles.pageCardDragOver : ""].join(" ") } onDragOver={onPageDragOver(page.id)} onDrop={onPageDrop(page.id)}>
                   <div className={styles.pageHeader}>
-                    <div className={styles.pageTitleWrap}><span className={styles.drag}>?</span><input value={page.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,title:e.target.value}:p))} className={styles.pageTitleInput} /></div>
+                    <div className={styles.pageTitleWrap}><span className={styles.drag} draggable onDragStart={onPageDragStart(page.id)} onDragEnd={onPageDragEnd} aria-label="Drag page">{"\u2630"}</span><input value={page.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,title:e.target.value}:p))} className={styles.pageTitleInput} /></div>
                     <button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.filter((p)=>p.id!==page.id))}>Delete Page</button>
                   </div>
 
-                  {page.elements.map((el) => (
-                    <div key={el.id} className={styles.elementCard}>
+                  {page.elements.map((el, elIndex) => (
+                    <div key={`${el.id}-${elIndex}`} className={styles.elementCard}>
                       <div className={styles.elementType}>{el.type}</div>
                       <input className={styles.questionInput} value={el.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,title:e.target.value}:item)}:p))} placeholder="Question" />
                       <input className={styles.questionSub} value={el.subtitle} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,subtitle:e.target.value}:item)}:p))} placeholder="Subtitle (optional)" />
@@ -424,12 +817,60 @@ export default function SurveyCreatePage() {
                         </label>
                       ) : null}
 
-                      {(["choice","checkbox","dropdown"] as ElementType[]).includes(el.type) ? (
+                                            {(["choice","checkbox","dropdown"] as ElementType[]).includes(el.type) ? (
                         <div className={styles.optionList}>
+                          <div className={styles.dataSourcePanel}>
+                            <label className={styles.dataSourceLabel}>Data Source:</label>
+                            <select
+                              className={styles.dataSourceSelect}
+                              value={el.dataSource || "manual"}
+                              onChange={(e) => {
+                                const selected = e.target.value as DataSourceType;
+                                setPages((prev) =>
+                                  prev.map((p) =>
+                                    p.id === page.id
+                                      ? {
+                                          ...p,
+                                          elements: p.elements.map((item) =>
+                                            item.id === el.id
+                                              ? applyMasterDataSource(selected, item)
+                                              : item,
+                                          ),
+                                        }
+                                      : p,
+                                  ),
+                                );
+                              }}
+                            >
+                              <option value="manual">Manual Input</option>
+                              <option value="bu">Master: Business Unit</option>
+                              <option value="division">Master: Division</option>
+                              <option value="department">Master: Department</option>
+                            </select>
+                            {el.dataSource && el.dataSource !== "manual" ? <span className={styles.dataSourceBadge}>Using master data</span> : null}
+                          </div>
+
                           {el.options.map((opt, idx) => (
-                            <div key={`${el.id}-${idx}`} className={styles.optionRow}><input value={opt} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.map((ov,oi)=>oi===idx?e.target.value:ov)}:item)}:p))} /><button type="button" className={styles.optionDelete} onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.length>1?item.options.filter((_,oi)=>oi!==idx):item.options}:item)}:p))}>×</button></div>
+                            <div key={`${el.id}-${idx}`} className={styles.optionRow}>
+                              <input
+                                value={opt}
+                                disabled={el.dataSource !== "manual"}
+                                onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.map((ov,oi)=>oi===idx?e.target.value:ov)}:item)}:p))}
+                              />
+                              <button
+                                type="button"
+                                className={styles.optionDelete}
+                                disabled={el.dataSource !== "manual"}
+                                onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.length>1?item.options.filter((_,oi)=>oi!==idx):item.options}:item)}:p))}
+                              >
+                                {"\u00D7"}
+                              </button>
+                            </div>
                           ))}
-                          <button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:[...item.options,`Option ${item.options.length+1}`]}:item)}:p))}>+ Add option</button>
+
+                          {el.dataSource === "manual" ? (
+                            <button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:[...item.options,`Option ${item.options.length+1}`]}:item)}:p))}>+ Add option</button>
+                          ) : null}
                         </div>
                       ) : null}
 
@@ -451,10 +892,104 @@ export default function SurveyCreatePage() {
 
       {showStyle ? <div className={styles.overlay} onClick={()=>setShowStyle(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Style Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowStyle(false)}>Close</button></div><div className={styles.modalBody}><label>Your Logo<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setLogo)} /></label><label>Background Color<input type="color" value={bgColor} onChange={(e)=>setBgColor(e.target.value)} /></label><label>Background Image<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setBgImage)} /></label><label>Font<select value={font} onChange={(e)=>setFont(e.target.value as FontPreset)}><option value="default">Default</option><option value="georgia">Georgia</option><option value="trebuchet">Trebuchet MS</option><option value="verdana">Verdana</option><option value="tahoma">Tahoma</option><option value="courier">Courier New</option></select></label></div></div></div> : null}
 
-      {showPreview ? <div className={styles.overlay} onClick={()=>setShowPreview(false)}><div className={styles.preview} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Survey Preview</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowPreview(false)}>Back to Builder</button></div><div className={styles.previewBody}><h3>{surveyTitle || "Survey Title"}</h3><p>{surveyDesc || "Survey description"}</p>{pages.map((p)=><div key={`pv-${p.id}`} className={styles.previewPage}><h4>{p.title}</h4>{p.elements.map((el)=><div key={`pve-${el.id}`} className={styles.previewQuestion}><div>{el.title || "Question"}{el.required ? " *" : ""}</div>{el.subtitle ? <small>{el.subtitle}</small> : null}</div>)}</div>)}</div></div></div> : null}
+      {showPreview ? (
+        <div className={styles.overlay} onClick={() => setShowPreview(false)}>
+          <div className={styles.preview} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHead}>
+              <h2>Survey Preview</h2>
+              <button className={styles.inlineButton} type="button" onClick={() => setShowPreview(false)}>Back to Builder</button>
+            </div>
+            <div className={styles.previewBody}>
+              <h3>{surveyTitle || "Survey Title"}</h3>
+              <p>{surveyDesc || "Survey description"}</p>
+              {pages.map((p) => (
+                <div key={`pv-${p.id}`} className={styles.previewPage}>
+                  <h4>{p.title}</h4>
+                  {p.elements.map((el, elIndex) => (
+                    <div key={`pve-${p.id}-${el.id}-${elIndex}`} className={styles.previewQuestion}>
+                      {el.type !== "hero" ? <div className={styles.previewLabel}>{el.title || "Question"}{el.required ? " *" : ""}</div> : null}
+                      {el.type !== "hero" && el.subtitle ? <small>{el.subtitle}</small> : null}
+                      <SurveyPreviewElement
+                        element={el}
+                        allElements={allBuilderElements}
+                        values={previewValues}
+                        onSetValue={setPreviewValue}
+                        onSetValuesBulk={setPreviewValuesBulk}
+                        onToggleCheckbox={togglePreviewCheckbox}
+                        orgData={{
+                          businessUnits: orgBusinessUnits,
+                          divisions: orgDivisions,
+                          departments: orgDepartments,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
