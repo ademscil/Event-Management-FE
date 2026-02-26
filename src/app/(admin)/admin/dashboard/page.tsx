@@ -1,9 +1,12 @@
 "use client";
 
+import { getCurrentUser } from "@/lib/auth";
 import { fetchSurveyOverview } from "@/lib/surveys";
+import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
 import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
+import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
 
 function formatPeriod(startDate: string, endDate: string): string {
@@ -41,9 +44,10 @@ export default function DashboardPage() {
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentRole] = useState<UserRole | null>(() => getCurrentUser()?.role ?? null);
 
-  const [periodStart, setPeriodStart] = useState("2026-01-01");
-  const [periodEnd, setPeriodEnd] = useState("2026-12-31");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [searchBy, setSearchBy] = useState("all");
@@ -101,6 +105,8 @@ export default function DashboardPage() {
     }).format(latestDate)}`;
   }, [filteredSurveys]);
 
+  const showReportAction = currentRole === "AdminEvent";
+
   const onApplySearch = () => {
     setAppliedSearchBy(searchBy);
     setAppliedKeyword(keyword);
@@ -136,16 +142,16 @@ export default function DashboardPage() {
         <div className={styles.periodRow}>
           <div className={styles.periodLabel}>STATUS</div>
           <div className={styles.periodColon}>:</div>
-          <select
-            id="status"
+          <Dropdown
             className={`${styles.select} ${styles.statusControl}`}
+            options={[
+              { value: "all", label: "All" },
+              { value: "active", label: "Active" },
+              { value: "closed", label: "Closed" },
+            ]}
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-          </select>
+            onChange={setStatusFilter}
+          />
         </div>
         <SearchBar
           rowClassName={styles.masterSearchRow}
@@ -183,12 +189,13 @@ export default function DashboardPage() {
                   <th>Target Responden</th>
                   <th>Score</th>
                   <th>Target Score</th>
+                  {showReportAction ? <th>Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredSurveys.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>Tidak ada data survey</td>
+                    <td colSpan={showReportAction ? 8 : 7}>Tidak ada data survey</td>
                   </tr>
                 ) : (
                   filteredSurveys.map((survey) => (
@@ -208,6 +215,11 @@ export default function DashboardPage() {
                       <td>{formatNumber(survey.TargetRespondents)}</td>
                       <td>{formatScore(survey.CurrentScore)}</td>
                       <td>{formatScore(survey.TargetScore)}</td>
+                      {showReportAction ? (
+                        <td>
+                          <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -219,3 +231,4 @@ export default function DashboardPage() {
     </>
   );
 }
+

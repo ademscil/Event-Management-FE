@@ -2,16 +2,25 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
+import { getCurrentUser } from "@/lib/auth";
 import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
+import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
+import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
 
-function formatPeriod(startDate: string, endDate: string): string {
+function formatPeriod(startDate: string | null, endDate: string | null): string {
+  if (!startDate || !endDate) return "-";
+  
   const start = new Date(startDate);
   const end = new Date(endDate);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "-";
+  
   const format = new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "short",
@@ -69,6 +78,7 @@ function matchesStatusFilter(status: string, filter: string): boolean {
 
 export default function EventManagementPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [eventType, setEventType] = useState<"survey" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [adminEventInput, setAdminEventInput] = useState("");
@@ -77,37 +87,47 @@ export default function EventManagementPage() {
   const [showAdminSuggestion, setShowAdminSuggestion] = useState(false);
   const [draftDescription, setDraftDescription] = useState("");
 
-  const [periodStart, setPeriodStart] = useState("2026-01-01");
-  const [periodEnd, setPeriodEnd] = useState("2026-12-31");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [currentUser] = useState(() => getCurrentUser());
+  const [currentRole] = useState<UserRole | null>(() => currentUser?.role ?? null);
+
   const [searchBy, setSearchBy] = useState("all");
   const [keyword, setKeyword] = useState("");
   const [appliedSearchBy, setAppliedSearchBy] = useState("all");
   const [appliedKeyword, setAppliedKeyword] = useState("");
 
+
   const activeAdminQuery = useMemo(() => adminEventInput.trim(), [adminEventInput]);
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     setLoading(true);
-    const result = await fetchSurveyOverview();
+
+    const roleBasedFilter = currentRole === "AdminEvent" && currentUser?.userId
+      ? { assignedAdminId: String(currentUser.userId) }
+      : undefined;
+
+    const result = await fetchSurveyOverview(roleBasedFilter);
     setLoading(false);
+
     if (!result.success) {
       setError(result.message || "Gagal memuat data survey");
       setSurveys([]);
       return;
     }
+
     setError("");
     setSurveys(result.surveys);
-  };
-
+  }, [currentRole, currentUser]);
   useEffect(() => {
     void loadEvents();
-  }, []);
+  }, [loadEvents]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -134,6 +154,14 @@ export default function EventManagementPage() {
 
     return surveys
       .filter((survey) => {
+        if (currentRole === "AdminEvent" && currentUser?.userId) {
+          const currentUserId = String(currentUser.userId);
+          const assignedIds = survey.AssignedAdminIds || [];
+          if (!assignedIds.includes(currentUserId)) {
+            return false;
+          }
+        }
+
         if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
         if (!matchesStatusFilter(survey.Status, statusFilter)) return false;
 
@@ -158,10 +186,21 @@ export default function EventManagementPage() {
         const bDate = new Date(b.UpdatedAt || b.CreatedAt || 0).getTime();
         return bDate - aDate;
       });
-  }, [surveys, periodStart, periodEnd, statusFilter, appliedSearchBy, appliedKeyword]);
+  }, [
+    surveys,
+    currentRole,
+    currentUser,
+    periodStart,
+    periodEnd,
+    statusFilter,
+    appliedSearchBy,
+    appliedKeyword,
+  ]);
+
 
   const closeModal = () => {
     setShowCreateModal(false);
+    setEventType(null);
     setDraftName("");
     setAdminEventInput("");
     setSelectedAdminEvents([]);
@@ -195,11 +234,7 @@ export default function EventManagementPage() {
     setSubmitting(true);
     const createResult = await createEventDraft({
       title: draftName.trim(),
-      description: `[Admin Event Target: ${selectedAdminEvents
-        .map((item) => item.DisplayName)
-        .join(", ")}] ${draftDescription.trim()}`.trim(),
-      startDate: new Date(periodStart).toISOString(),
-      endDate: new Date(periodEnd).toISOString(),
+      description: draftDescription.trim(),
       assignedAdminId: selectedAdminEvents[0]?.UserId,
     });
     setSubmitting(false);
@@ -212,6 +247,10 @@ export default function EventManagementPage() {
     closeModal();
     await loadEvents();
   };
+
+
+  const canCreateEvent = currentRole === "SuperAdmin";
+  const showContinueDesign = currentRole === "AdminEvent";
 
   const onApplySearch = () => {
     setAppliedSearchBy(searchBy);
@@ -227,15 +266,17 @@ export default function EventManagementPage() {
             Admin Superuser membuat draft kosong, Admin Event melanjutkan desain &amp; mapping.
           </div>
         </div>
-        <div className={styles.toolbar}>
-          <button
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={() => setShowCreateModal(true)}
-            type="button"
-          >
-            + Create Survey Event
-          </button>
-        </div>
+        {canCreateEvent ? (
+          <div className={styles.toolbar}>
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={() => setShowCreateModal(true)}
+              type="button"
+            >
+              Create Event
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <section className={styles.panel}>
@@ -261,18 +302,18 @@ export default function EventManagementPage() {
         <div className={styles.periodRow}>
           <div className={styles.periodLabel}>STATUS</div>
           <div className={styles.periodColon}>:</div>
-          <select
-            id="status"
+          <Dropdown
             className={`${styles.select} ${styles.statusControl}`}
+            options={[
+              { value: "all", label: "All" },
+              { value: "draft", label: "Draft Empty" },
+              { value: "design", label: "In Design" },
+              { value: "active", label: "Active" },
+              { value: "closed", label: "Closed" },
+            ]}
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All</option>
-            <option value="draft">Draft Empty</option>
-            <option value="design">In Design</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-          </select>
+            onChange={setStatusFilter}
+          />
         </div>
         <SearchBar
           rowClassName={styles.masterSearchRow}
@@ -309,12 +350,13 @@ export default function EventManagementPage() {
                   <th>Periode</th>
                   <th>Status</th>
                   <th>Last Edited</th>
+                  {showContinueDesign ? <th>Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {filteredAndSortedSurveys.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>Tidak ada data survey</td>
+                    <td colSpan={showContinueDesign ? 6 : 5}>Tidak ada data survey</td>
                   </tr>
                 ) : (
                   filteredAndSortedSurveys.map((row) => (
@@ -328,6 +370,35 @@ export default function EventManagementPage() {
                         </span>
                       </td>
                       <td>{formatLastEdited(row.UpdatedAt, row.CreatedAt)}</td>
+                      {showContinueDesign ? (
+                        <td>
+                          {row.Status === "Active" || row.Status === "In Design" ? (
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <Link
+                                href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
+                                className={`${styles.btn} ${styles.btnSecondary}`}
+                              >
+                                Continue Design
+                              </Link>
+                              {row.Status === "Active" ? (
+                                <Link
+                                  href={`/admin/event-management/${row.SurveyId}/operations`}
+                                  className={`${styles.btn} ${styles.btnPrimary}`}
+                                >
+                                  Operations
+                                </Link>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <Link
+                              href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
+                              className={`${styles.btn} ${styles.btnSecondary}`}
+                            >
+                              Continue Design
+                            </Link>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -344,15 +415,70 @@ export default function EventManagementPage() {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Create Survey Event"
+            aria-label="Create Event"
           >
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Create Survey Event</h2>
+              <h2 className={styles.modalTitle}>{eventType ? "Create Survey Event" : "Select Event Type"}</h2>
               <button className={styles.modalClose} onClick={closeModal} type="button" aria-label="Close">
                 x
               </button>
             </div>
             <div className={styles.modalBody}>
+              {!eventType ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <p style={{ margin: 0, fontSize: "14px", color: "#6b7280" }}>
+                    Pilih tipe event yang akan dibuat:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setEventType("survey")}
+                    style={{
+                      padding: "16px 20px",
+                      border: "2px solid #e5e7eb",
+                      borderRadius: "10px",
+                      background: "#ffffff",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "#2f55d4";
+                      e.currentTarget.style.background = "#f8fafc";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "#e5e7eb";
+                      e.currentTarget.style.background = "#ffffff";
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>
+                      Forms / Survey
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                      Buat event survey untuk mengumpulkan feedback dari responden
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    style={{
+                      padding: "16px 20px",
+                      border: "2px solid #e5e7eb",
+                      borderRadius: "10px",
+                      background: "#f9fafb",
+                      cursor: "not-allowed",
+                      textAlign: "left",
+                      opacity: 0.5,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: "16px", marginBottom: "4px" }}>
+                      Other Event Types
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#6b7280" }}>
+                      Coming soon...
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <>
               <div className={styles.formGroup}>
                 <label className={styles.label} htmlFor="surveyName">
                   Survey Name *
@@ -444,19 +570,23 @@ export default function EventManagementPage() {
                   rows={3}
                 />
               </div>
+                </>
+              )}
             </div>
             <div className={styles.modalFooter}>
               <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={closeModal} type="button">
                 Cancel
               </button>
-              <button
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={handleCreateDraft}
-                disabled={submitting}
-                type="button"
-              >
-                {submitting ? "Creating..." : "Create"}
-              </button>
+              {eventType ? (
+                <button
+                  className={`${styles.btn} ${styles.btnPrimary}`}
+                  onClick={handleCreateDraft}
+                  disabled={submitting}
+                  type="button"
+                >
+                  {submitting ? "Creating..." : "Create"}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -464,3 +594,20 @@ export default function EventManagementPage() {
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

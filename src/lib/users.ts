@@ -307,3 +307,84 @@ export async function downloadUserTemplateFile(): Promise<{
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
+
+export async function downloadUserList(): Promise<{
+  success: boolean;
+  blob?: Blob;
+  filename?: string;
+  message?: string;
+}> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/users/download`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      return { success: false, message: getErrorMessage(payload, "Gagal download user list") };
+    }
+
+    const contentDisposition = response.headers.get("content-disposition") || "";
+    const match = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    const filename = match?.[1] || "user-list.xlsx";
+    const blob = await response.blob();
+
+    return { success: true, blob, filename };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function uploadUserFile(file: File): Promise<{
+  success: boolean;
+  message?: string;
+  imported?: number;
+  failed?: number;
+  errors?: Array<{ row: number; data: any; errors: string[] }>;
+}> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${API_BASE_PATH}/users/upload`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; message?: string; error?: string; imported?: number; failed?: number; errors?: Array<{ row: number; data: any; errors: string[] }> }
+      | null;
+
+    if (!response.ok || !payload?.success) {
+      return { 
+        success: false, 
+        message: getErrorMessage(payload, "Gagal upload file"),
+        imported: payload?.imported,
+        failed: payload?.failed,
+        errors: payload?.errors
+      };
+    }
+
+    return {
+      success: true,
+      message: payload.message,
+      imported: payload.imported,
+      failed: payload.failed,
+      errors: payload.errors,
+    };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}

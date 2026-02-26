@@ -1,4 +1,4 @@
-.pageHead {
+﻿.pageHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -8,7 +8,7 @@
 
 .title {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 600;
   color: #111827;
 }
@@ -140,11 +140,13 @@
   color: #ffffff;
   border-radius: 12px 0 0 12px;
   padding: 0 14px;
-  width: 150px;
-  min-width: 150px;
+  height: 42px;
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 
@@ -192,11 +194,13 @@
   color: #ffffff;
   border-radius: 12px 0 0 12px;
   padding: 0 14px;
-  width: 112px;
-  min-width: 112px;
+  height: 42px;
   flex-shrink: 0;
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 
@@ -231,6 +235,39 @@
   cursor: pointer;
 }
 
+
+.masterTableWrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scrollbar-gutter: stable;
+}
+
+.masterTableWrap::-webkit-scrollbar {
+  height: 10px;
+}
+
+.masterTableWrap::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 999px;
+}
+
+.masterTableWrap::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.masterTableWrap::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.masterTable {
+  width: max-content;
+  min-width: 1200px;
+}
+
 .masterDownloadButton {
   border: 1px solid #2f55d4;
   background: #2f55d4;
@@ -249,7 +286,7 @@
 
 .table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
@@ -264,7 +301,19 @@
   padding: 13px 14px;
   text-align: left;
   vertical-align: middle;
-  white-space: nowrap;
+}
+
+.table th:nth-child(3),
+.table td:nth-child(3),
+.table th:nth-child(4),
+.table td:nth-child(4),
+.table th:nth-child(5),
+.table td:nth-child(5),
+.table th:nth-child(6),
+.table td:nth-child(6),
+.table th:nth-child(7),
+.table td:nth-child(7) {
+  text-align: center;
 }
 
 .table th {
@@ -716,3 +765,259 @@
 
 
 
+
+
+.controlRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.controlActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inlineCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.operationalPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.subPanel {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.controlRow .input {
+  flex: 1 1 340px;
+  min-width: 260px;
+}
+
+.inlineCheck {
+  padding: 0 6px;
+  min-height: 40px;
+}
+
+@media (max-width: 900px) {
+  .controlRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .controlActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+
+.opsPanel {
+  padding: 22px;
+  border-radius: 14px;
+  border-color: #dbe2ea;
+}
+
+.opsHero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.opsSubtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.opsPill {
+  border: 1px solid #d1d5db;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.opsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.opsPrimary,
+.opsSecondary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.opsBlock {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.opsBlockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.opsBlockTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.linkRowModern {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.channelTabs {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.channelTab {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.channelTabActive {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.channelPanel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.channelTopRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.previewCard {
+  margin-top: 12px;
+  border: 1px solid #dbe5f5;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.previewCover {
+  border-radius: 10px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  background: linear-gradient(120deg, #c7d2fe 0%, #bfdbfe 100%);
+}
+
+.previewCard h4 {
+  margin: 12px 0 4px;
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.previewCard p {
+  margin: 0;
+  color: #64748b;
+}
+
+.qrPlaceholder {
+  min-height: 200px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #64748b;
+}
+
+.qrBox {
+  width: 86px;
+  height: 86px;
+  border: 2px solid #334155;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #334155;
+  background: #ffffff;
+}
+
+.blockButton {
+  width: 100%;
+  min-height: 40px;
+  font-size: 13px;
+}
+
+@media (max-width: 1280px) {
+  .opsLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .opsHero {
+    flex-direction: column;
+  }
+
+  .linkRowModern {
+    grid-template-columns: 1fr;
+  }
+
+  .channelTopRow {
+    grid-template-columns: 1fr;
+  }
+}
