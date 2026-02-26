@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchSurveyById, scheduleEventBlast, scheduleEventReminder } from "@/lib/surveys";
 import { generateQRCode, getScheduledOperations, cancelScheduledOperation } from "@/lib/operations";
@@ -19,7 +19,6 @@ interface ScheduledOperation {
 
 export default function OperationsPage() {
   const params = useParams();
-  const router = useRouter();
   const surveyId = params.surveyId as string;
 
   const [loading, setLoading] = useState(true);
@@ -52,12 +51,17 @@ export default function OperationsPage() {
         return;
       }
       setSurveyTitle(result.survey.Title || "");
-      await loadOperations();
+      setOpsLoading(true);
+      const opsResult = await getScheduledOperations(surveyId);
+      setOpsLoading(false);
+      if (opsResult.success && opsResult.operations) {
+        setOperations(opsResult.operations);
+      }
     };
     void load();
   }, [surveyId]);
 
-  const loadOperations = async () => {
+  async function loadOperations() {
     setOpsLoading(true);
     const result = await getScheduledOperations(surveyId);
     setOpsLoading(false);
@@ -333,3 +337,9 @@ export default function OperationsPage() {
     </div>
   );
 }
+
+
+
+
+
+
