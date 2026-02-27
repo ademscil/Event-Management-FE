@@ -44,6 +44,10 @@ export type UpdateUserInput = {
 function getErrorMessage(payload: unknown, fallback: string): string {
   if (!payload || typeof payload !== "object") return fallback;
   const maybePayload = payload as Record<string, unknown>;
+  if (Array.isArray(maybePayload.details) && maybePayload.details.length > 0) {
+    const first = maybePayload.details[0] as Record<string, unknown>;
+    if (typeof first?.msg === "string" && first.msg.trim()) return first.msg;
+  }
   if (typeof maybePayload.message === "string") return maybePayload.message;
   if (typeof maybePayload.error === "string") return maybePayload.error;
   return fallback;
