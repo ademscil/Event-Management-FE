@@ -335,10 +335,11 @@
   font-size: 13px;
   min-height: 80px;
   overflow: hidden;
+  background: #fff;
 }
 .coverUpload:hover { border-color: #3b82f6; background-color: #f9fafb; }
 .coverUpload input { display: none; }
-.coverImg { width: 100%; height: 200px; object-fit: cover; }
+.coverImg { width: 100%; height: 200px; object-fit: contain; background: #fff; }
 
 .optionList { margin-top: 8px; }
 .optionRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -351,6 +352,47 @@
   background: transparent;
 }
 .optionDelete { color: #ef4444; cursor: pointer; font-size: 16px; border: 0; background: transparent; }
+.settingPanel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+.settingRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.settingLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.01em;
+}
+.settingSelect {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+  color: #0f172a;
+}
+.settingCheckLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #0f172a;
+}
+.settingHint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
 
 .elementActions {
   display: flex;
@@ -445,6 +487,118 @@
   overflow: auto;
 }
 
+.previewScreen {
+  min-height: calc(100vh - 80px);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.previewTopbar {
+  padding: 14px 18px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.previewDeviceTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.previewDeviceTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.previewDeviceTab svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.previewDeviceTabActive {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+}
+
+.previewViewportWrap {
+  padding: 18px 18px 24px;
+  background: #eef2f7;
+}
+
+.previewViewport {
+  margin: 0 auto;
+  border-radius: 14px;
+  border: 1px solid #dbe3ee;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+  background: #f5f5f5;
+}
+
+.previewViewportDesktop {
+  width: 100%;
+}
+
+.previewViewportMobile {
+  width: min(430px, 100%);
+  min-height: 640px;
+}
+
+.previewTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.previewSub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.previewFullBody {
+  padding: 24px;
+  background-color: #f5f5f5;
+  min-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.previewSurveyBrand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+  padding: 6px 0;
+}
+
+.previewSurveyLogo {
+  max-height: 56px;
+  max-width: 220px;
+  width: auto;
+  object-fit: contain;
+}
+
 .previewPage {
   background: #f9fafb;
   border-radius: 8px;
@@ -455,6 +609,19 @@
 
 .previewQuestion { margin-bottom: 20px; padding-top: 8px; border-top: 1px solid #eef2f7; }
 .previewLabel { font-size: 15px; font-weight: 500; margin-bottom: 12px; color: #111827; }
+.previewAppGroup {
+  margin-bottom: 18px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 12px 14px 4px;
+}
+.previewAppGroupTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 4px;
+}
 
 .previewInput,
 .previewSelect {
@@ -467,6 +634,11 @@
 }
 
 .previewOptions { display: grid; gap: 8px; margin-top: 8px; }
+.previewOptionsVertical { grid-template-columns: 1fr; }
+.previewOptionsHorizontal {
+  grid-template-columns: repeat(auto-fit, minmax(220px, max-content));
+  align-items: start;
+}
 .previewOptionItem {
   display: flex;
   align-items: center;
@@ -523,7 +695,8 @@
   max-height: 260px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 8px;
-  object-fit: cover;
+  object-fit: contain;
+  background-color: #fff;
 }
 
 .previewHeroPlaceholder {
@@ -547,32 +720,14 @@
   .builderSidebar { border-right: 0; border-bottom: 1px solid #e5e7eb; }
   .topbar { align-items: flex-start; }
   .targetGrid { grid-template-columns: 1fr; }
+  .previewTopbar {
+    flex-wrap: wrap;
+  }
+  .previewDeviceTabs {
+    order: 3;
+  }
 }
 
-.shareRow {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 12px;
-}
-\n.shareLabel {
-  font-weight: 600;
-}
-\n.shareLink {
-  color: #1d4ed8;
-  text-decoration: underline;
-  word-break: break-all;
-}
-\n.copyButton {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-}
 .dataSourcePanel {
   margin: 8px 0 10px;
   padding: 8px 10px;
@@ -606,4 +761,23 @@
   font-size: 11px;
   color: #166534;
   font-weight: 600;
+}
+
+.mappingHint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #334155;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.previewHint {
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
 }
