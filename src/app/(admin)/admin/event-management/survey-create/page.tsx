@@ -4,8 +4,10 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { fetchSurveyById, updateEventById, generateEventLink, fetchSurveyQuestions, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion } from "@/lib/surveys";
+import { fetchSurveyById, updateEventById, updateEventConfiguration, fetchSurveyQuestions, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion } from "@/lib/surveys";
 import { fetchOrgHierarchy, type BusinessUnitOption, type DivisionOption, type DepartmentOption } from "@/lib/org-hierarchy";
+import { fetchFunctionsMaster, type FunctionMaster } from "@/lib/master-data";
+import { fetchMappedApplicationsByDepartment, fetchMappedApplicationsByFunction } from "@/lib/mappings";
 import type { SurveyQuestion } from "@/types/survey";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -19,7 +21,16 @@ type ElementType = "hero" | "text" | "choice" | "checkbox" | "dropdown" | "ratin
 
 type FontPreset = "default" | "georgia" | "trebuchet" | "verdana" | "tahoma" | "courier";
 
-type DataSourceType = "manual" | "bu" | "division" | "department";
+type DataSourceType =
+  | "manual"
+  | "bu"
+  | "division"
+  | "department"
+  | "function"
+  | "app_department"
+  | "app_function";
+
+type ProfileFieldType = "bu" | "division" | "department" | "function" | null;
 
 interface BuilderElement {
   id: string;
@@ -30,6 +41,10 @@ interface BuilderElement {
   options: string[];
   coverUrl: string;
   dataSource?: DataSourceType;
+  optionLayout?: "vertical" | "horizontal";
+  displayCondition?: "always" | "after_mapped_selection";
+  conditionalRequiredSourceId?: string;
+  conditionalRequiredThreshold?: number;
 }
 
 interface BuilderPage {
@@ -90,6 +105,19 @@ function mapType(value: string): ElementType {
   return "text";
 }
 
+function mapTypeWithOptions(value: string, options: unknown): ElementType {
+  if (value !== "MatrixLikert") {
+    return mapType(value);
+  }
+
+  if (options && typeof options === "object") {
+    const variant = String((options as { variant?: unknown }).variant || "").toLowerCase();
+    if (variant === "matrix") return "matrix";
+  }
+
+  return "likert";
+}
+
 function toApiType(value: ElementType): string {
   if (value === "hero") return "HeroCover";
   if (value === "choice") return "MultipleChoice";
@@ -106,29 +134,115 @@ function extractQuestionId(builderId: string): string | null {
   if (!builderId.startsWith("q-")) return null;
   return builderId.slice(2);
 }
-function parseOptions(raw: unknown): string[] {
+function parseOptions(raw: unknown, elementType: ElementType): string[] {
   if (Array.isArray(raw)) return raw.map((v) => String(v));
+
   if (raw && typeof raw === "object") {
-    const data = raw as { options?: unknown[] };
+    const data = raw as {
+      options?: unknown[];
+      rows?: unknown[];
+      columns?: unknown[];
+      ratingScale?: unknown;
+    };
+
+    if (elementType === "matrix" && Array.isArray(data.columns)) {
+      return data.columns.map((v) => String(v));
+    }
+
+    if (elementType === "likert" && Array.isArray(data.rows)) {
+      return data.rows.map((v) => String(v));
+    }
+
     if (Array.isArray(data.options)) return data.options.map((v) => String(v));
+    if (elementType === "rating" && typeof data.ratingScale !== "undefined") {
+      return [String(data.ratingScale)];
+    }
   }
+
+  if (elementType === "rating") return ["10"];
+  if (elementType === "likert") return ["Statement 1", "Statement 2"];
+  if (elementType === "matrix") return ["Column 1", "Column 2", "Column 3"];
   return ["Option 1"];
+}
+
+function parseDataSource(raw: unknown): DataSourceType {
+  if (!raw || typeof raw !== "object") return "manual";
+  const value = String((raw as { dataSource?: unknown }).dataSource || "manual");
+  if (
+    value === "bu" ||
+    value === "division" ||
+    value === "department" ||
+    value === "function" ||
+    value === "app_department" ||
+    value === "app_function"
+  ) {
+    return value;
+  }
+  return "manual";
+}
+
+function parseOptionLayout(raw: unknown, elementType: ElementType): "vertical" | "horizontal" {
+  if (elementType !== "choice" && elementType !== "checkbox") return "vertical";
+  if (!raw || typeof raw !== "object") return "vertical";
+  const value = String((raw as { layout?: unknown }).layout || "vertical").toLowerCase();
+  return value === "horizontal" ? "horizontal" : "vertical";
+}
+
+function parseDisplayCondition(raw: unknown): "always" | "after_mapped_selection" {
+  if (!raw || typeof raw !== "object") return "always";
+  const value = String((raw as { displayCondition?: unknown }).displayCondition || "always");
+  return value === "after_mapped_selection" ? "after_mapped_selection" : "always";
+}
+
+function parseConditionalRequiredSourceId(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = (raw as { conditionalRequired?: { sourceElementId?: unknown } }).conditionalRequired;
+  const sourceId = String(value?.sourceElementId || "").trim();
+  return sourceId || undefined;
+}
+
+function parseConditionalRequiredThreshold(raw: unknown): number | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = (raw as { conditionalRequired?: { threshold?: unknown } }).conditionalRequired;
+  const parsed = Number(value?.threshold);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.min(10, Math.max(1, Math.round(parsed)));
+}
+
+function inferProfileField(element: BuilderElement): ProfileFieldType {
+  if (element.dataSource === "bu") return "bu";
+  if (element.dataSource === "division") return "division";
+  if (element.dataSource === "department") return "department";
+  if (element.dataSource === "function") return "function";
+
+  const title = (element.title || "").trim().toLowerCase();
+  if (title.includes("business unit") || title === "bu") return "bu";
+  if (title.includes("division") || title.includes("divisi") || title === "div") return "division";
+  if (title.includes("department") || title.includes("departemen") || title.includes("dept")) return "department";
+  if (title.includes("function")) return "function";
+  return null;
 }
 
 function toPages(questions?: SurveyQuestion[]): BuilderPage[] {
   if (!questions || questions.length === 0) return [];
   const map = new Map<number, BuilderElement[]>();
   questions.forEach((q, idx) => {
+    const resolvedType = mapTypeWithOptions(q.Type, q.Options);
     const page = q.PageNumber || 1;
     if (!map.has(page)) map.set(page, []);
     map.get(page)?.push({
       id: q.QuestionId ? `q-${q.QuestionId}` : `q-${idx + 1}`,
-      type: mapType(q.Type),
+      type: resolvedType,
       title: q.PromptText || "",
       subtitle: q.Subtitle || "",
       required: Boolean(q.IsMandatory),
-      options: parseOptions(q.Options),
+      options: parseOptions(q.Options, resolvedType),
       coverUrl: "",
+      dataSource: parseDataSource(q.Options),
+      optionLayout: parseOptionLayout(q.Options, resolvedType),
+      displayCondition: parseDisplayCondition(q.Options),
+      conditionalRequiredSourceId: parseConditionalRequiredSourceId(q.Options),
+      conditionalRequiredThreshold: parseConditionalRequiredThreshold(q.Options),
     });
   });
   return Array.from(map.entries()).sort(([a],[b])=>a-b).map(([id,elements]) => ({ id, title: id===1?"Welcome":`Page ${id}`, elements }));
@@ -201,15 +315,28 @@ function normalizePagesForState(pages: BuilderPage[]): { pages: BuilderPage[]; c
 }
 
 function newElement(type: ElementType, tempId: string): BuilderElement {
+  const defaultOptions =
+    type === "rating"
+      ? ["10"]
+      : type === "likert"
+        ? ["Statement 1", "Statement 2"]
+        : type === "matrix"
+          ? ["Column 1", "Column 2", "Column 3"]
+          : ["Option 1"];
+
   return {
     id: tempId,
     type,
     title: type === "hero" ? "Hero title" : "Question",
     subtitle: "",
     required: false,
-    options: ["Option 1"],
+    options: defaultOptions,
     coverUrl: "",
     dataSource: "manual",
+    optionLayout: type === "choice" || type === "checkbox" ? "vertical" : undefined,
+    displayCondition: "always",
+    conditionalRequiredSourceId: undefined,
+    conditionalRequiredThreshold: undefined,
   };
 }
 
@@ -252,6 +379,17 @@ function isAutoTitle(title: string, id: number): boolean {
   return title === `Page ${id}`;
 }
 
+function renumberPages(pages: BuilderPage[]): BuilderPage[] {
+  return pages.map((page, index) => {
+    const nextId = index + 1;
+    return {
+      ...page,
+      id: nextId,
+      title: isAutoTitle(page.title, page.id) ? `Page ${nextId}` : page.title,
+    };
+  });
+}
+
 export default function SurveyCreatePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -263,7 +401,6 @@ export default function SurveyCreatePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [shareLink, setShareLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
@@ -275,7 +412,6 @@ export default function SurveyCreatePage() {
   const [scheduleEnd, setScheduleEnd] = useState("");
 
   const [pages, setPages] = useState<BuilderPage[]>([]);
-  const [pageCounter, setPageCounter] = useState(0);
   const [elementCounter, setElementCounter] = useState(0);
   const [draggingPageId, setDraggingPageId] = useState<number | null>(null);
   const [dragOverPageId, setDragOverPageId] = useState<number | null>(null);
@@ -288,11 +424,15 @@ export default function SurveyCreatePage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showStyle, setShowStyle] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({});
 
   const [orgBusinessUnits, setOrgBusinessUnits] = useState<BusinessUnitOption[]>([]);
   const [orgDivisions, setOrgDivisions] = useState<DivisionOption[]>([]);
   const [orgDepartments, setOrgDepartments] = useState<DepartmentOption[]>([]);
+  const [orgFunctions, setOrgFunctions] = useState<FunctionMaster[]>([]);
+  const [mappedApplicationsByDepartment, setMappedApplicationsByDepartment] = useState<string[]>([]);
+  const [mappedApplicationsByFunction, setMappedApplicationsByFunction] = useState<string[]>([]);
 
   const onPageDragStart = (pageId: number) => (event: DragEvent) => {
     event.dataTransfer.effectAllowed = "move";
@@ -328,14 +468,7 @@ export default function SurveyCreatePage() {
       const next = [...prev];
       const [moved] = next.splice(sourceIndex, 1);
       next.splice(targetIndex, 0, moved);
-      return next.map((page, index) => {
-        const newId = index + 1;
-        return {
-          ...page,
-          id: newId,
-          title: isAutoTitle(page.title, page.id) ? `Page ${newId}` : page.title,
-        };
-      });
+      return renumberPages(next);
     });
 
     setDraggingPageId(null);
@@ -365,6 +498,8 @@ export default function SurveyCreatePage() {
       setScheduleStart(toDateInput(detail.StartDate));
       setScheduleEnd(toDateInput(detail.EndDate));
       setBgColor(detail.configuration?.BackgroundColor || "#f5f5f5");
+      setBgImage(detail.configuration?.BackgroundImageUrl || "");
+      setLogo(detail.configuration?.LogoUrl || "");
 
       const local = localStorage.getItem(draftKey);
       if (local) {
@@ -378,7 +513,6 @@ export default function SurveyCreatePage() {
           setScheduleEnd(draft.scheduleEnd || toDateInput(detail.EndDate));
           const draftPages = ensureUniqueElementIds(Array.isArray(draft.pages) ? draft.pages : []);
           setPages(draftPages);
-          setPageCounter(draftPages.length ? Math.max(...draftPages.map((p) => p.id)) : 0);
           setElementCounter(getMaxTempElementCounter(draftPages));
           setLogo(draft.style?.logo || "");
           setBgColor(draft.style?.backgroundColor || "#f5f5f5");
@@ -398,14 +532,12 @@ export default function SurveyCreatePage() {
       ) {
         const templatePages = ensureUniqueElementIds(getCorpTemplatePages());
         setPages(templatePages);
-        setPageCounter(templatePages.length ? Math.max(...templatePages.map((p) => p.id)) : 0);
         setElementCounter(getMaxTempElementCounter(templatePages));
         return;
       }
 
       const normalizedPages = ensureUniqueElementIds(fromDb);
       setPages(normalizedPages);
-      setPageCounter(normalizedPages.length ? Math.max(...normalizedPages.map((p) => p.id)) : 0);
       setElementCounter(getMaxTempElementCounter(normalizedPages));
     };
 
@@ -414,11 +546,20 @@ export default function SurveyCreatePage() {
 
   useEffect(() => {
     const run = async () => {
-      const result = await fetchOrgHierarchy();
-      if (!result.success) return;
-      setOrgBusinessUnits(result.businessUnits);
-      setOrgDivisions(result.divisions);
-      setOrgDepartments(result.departments);
+      const [orgResult, functionResult] = await Promise.all([
+        fetchOrgHierarchy(),
+        fetchFunctionsMaster(),
+      ]);
+
+      if (orgResult.success) {
+        setOrgBusinessUnits(orgResult.businessUnits);
+        setOrgDivisions(orgResult.divisions);
+        setOrgDepartments(orgResult.departments);
+      }
+
+      if (functionResult.success) {
+        setOrgFunctions(functionResult.data.filter((item) => item.IsActive !== false));
+      }
     };
 
     void run();
@@ -439,6 +580,68 @@ export default function SurveyCreatePage() {
   const styleSummary = useMemo(() => `Logo: ${logo ? "On" : "Off"} | Background: ${bgColor} | Font: ${font === "default" ? "Default" : font}`, [bgColor, font, logo]);
 
   const allBuilderElements = useMemo(() => pages.flatMap((page) => page.elements), [pages]);
+  const profileFieldIds = useMemo(() => {
+    const bu = allBuilderElements.find((item) => inferProfileField(item) === "bu");
+    const division = allBuilderElements.find((item) => inferProfileField(item) === "division");
+    const department = allBuilderElements.find((item) => inferProfileField(item) === "department");
+    const func = allBuilderElements.find((item) => inferProfileField(item) === "function");
+
+    return {
+      buId: bu?.id || "",
+      divisionId: division?.id || "",
+      departmentId: department?.id || "",
+      functionId: func?.id || "",
+    };
+  }, [allBuilderElements]);
+
+  const selectedDepartmentId = profileFieldIds.departmentId
+    ? String(previewValues[profileFieldIds.departmentId] || "")
+    : "";
+  const selectedFunctionId = profileFieldIds.functionId
+    ? String(previewValues[profileFieldIds.functionId] || "")
+    : "";
+
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedDepartmentId) {
+        setMappedApplicationsByDepartment([]);
+        return;
+      }
+
+      const mapped = await fetchMappedApplicationsByDepartment(selectedDepartmentId);
+      if (!mapped.success) {
+        setMappedApplicationsByDepartment([]);
+        return;
+      }
+
+      setMappedApplicationsByDepartment(
+        mapped.applications.map((item) => item.ApplicationName).filter(Boolean),
+      );
+    };
+
+    void run();
+  }, [selectedDepartmentId]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedFunctionId) {
+        setMappedApplicationsByFunction([]);
+        return;
+      }
+
+      const mapped = await fetchMappedApplicationsByFunction(selectedFunctionId);
+      if (!mapped.success) {
+        setMappedApplicationsByFunction([]);
+        return;
+      }
+
+      setMappedApplicationsByFunction(
+        mapped.applications.map((item) => item.ApplicationName).filter(Boolean),
+      );
+    };
+
+    void run();
+  }, [selectedFunctionId]);
 
   const applyMasterDataSource = (source: DataSourceType, element: BuilderElement): BuilderElement => {
     if (source === "bu") {
@@ -462,6 +665,20 @@ export default function SurveyCreatePage() {
         options: orgDepartments.map((item) => item.Name),
       };
     }
+    if (source === "function") {
+      return {
+        ...element,
+        dataSource: source,
+        options: orgFunctions.map((item) => item.Name),
+      };
+    }
+    if (source === "app_department" || source === "app_function") {
+      return {
+        ...element,
+        dataSource: source,
+        options: [],
+      };
+    }
     return {
       ...element,
       dataSource: "manual",
@@ -470,9 +687,10 @@ export default function SurveyCreatePage() {
   };
 
   const addPage = () => {
-    const next = pageCounter + 1;
-    setPageCounter(next);
-    setPages((prev) => [...prev, { id: next, title: next === 1 ? "Welcome" : `Page ${next}`, elements: [] }]);
+    setPages((prev) => {
+      const nextId = prev.length + 1;
+      return [...prev, { id: nextId, title: nextId === 1 ? "Welcome" : `Page ${nextId}`, elements: [] }];
+    });
   };
 
   const addElement = (pageId: number, type: ElementType) => {
@@ -487,6 +705,38 @@ export default function SurveyCreatePage() {
           : page,
       ),
     );
+  };
+
+  const addElementToLastPage = (type: ElementType) => {
+    const nextCounter = elementCounter + 1;
+    const tempId = buildTempElementId(nextCounter);
+
+    setElementCounter(nextCounter);
+    setPages((prevPages) => {
+      if (prevPages.length === 0) {
+        return [{ id: 1, title: "Welcome", elements: [newElement(type, tempId)] }];
+      }
+
+      const targetPageId = prevPages[prevPages.length - 1].id;
+      return prevPages.map((page) =>
+        page.id === targetPageId
+          ? { ...page, elements: [...page.elements, newElement(type, tempId)] }
+          : page,
+      );
+    });
+  };
+
+  const removePage = (pageId: number) => {
+    setPages((prev) => renumberPages(prev.filter((page) => page.id !== pageId)));
+  };
+
+  const validateEventSchedule = (): boolean => {
+    if (scheduleStart && scheduleEnd && scheduleStart > scheduleEnd) {
+      setError("Tanggal akhir harus sama atau setelah tanggal mulai");
+      return false;
+    }
+
+    return true;
   };
 
   const isQuestionImmutableError = (message: string): boolean => {
@@ -520,6 +770,10 @@ export default function SurveyCreatePage() {
 
     for (const item of flat) {
       const questionId = extractQuestionId(item.element.id);
+      const ratingScale = Number(item.element.options?.[0] || 10);
+      const resolvedRatingScale = Number.isFinite(ratingScale)
+        ? Math.min(10, Math.max(3, Math.round(ratingScale)))
+        : 10;
       const payload = {
         surveyId,
         type: toApiType(item.element.type),
@@ -530,11 +784,43 @@ export default function SurveyCreatePage() {
         displayOrder: item.displayOrder,
         pageNumber: item.pageNumber,
         layoutOrientation: "vertical" as const,
-        options: ["choice", "checkbox", "dropdown"].includes(item.element.type)
-          ? { options: item.element.options, dataSource: item.element.dataSource || "manual" }
-          : ["likert", "matrix"].includes(item.element.type)
-            ? item.element.options
-            : null,
+        options: (() => {
+          const displayCondition =
+            item.element.displayCondition && item.element.displayCondition !== "always"
+              ? { displayCondition: item.element.displayCondition }
+              : {};
+          const conditionalRequired =
+            item.element.conditionalRequiredSourceId
+              ? {
+                  conditionalRequired: {
+                    sourceElementId: item.element.conditionalRequiredSourceId,
+                    threshold: Math.min(
+                      10,
+                      Math.max(1, Math.round(Number(item.element.conditionalRequiredThreshold || 7))),
+                    ),
+                  },
+                }
+              : {};
+
+          if (["choice", "checkbox", "dropdown"].includes(item.element.type)) {
+            return {
+              options: item.element.options,
+              dataSource: item.element.dataSource || "manual",
+              ...(item.element.type === "choice" || item.element.type === "checkbox"
+                ? { layout: item.element.optionLayout || "vertical" }
+                : {}),
+              ...displayCondition,
+              ...conditionalRequired,
+            };
+          }
+          if (item.element.type === "likert") return { variant: "likert", rows: item.element.options, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "matrix") return { variant: "matrix", columns: item.element.options, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "rating") return { ratingScale: resolvedRatingScale, ...displayCondition, ...conditionalRequired };
+          if (Object.keys(displayCondition).length > 0 || Object.keys(conditionalRequired).length > 0) {
+            return { ...displayCondition, ...conditionalRequired };
+          }
+          return null;
+        })(),
       };
 
       if (questionId && remoteById.has(questionId)) {
@@ -598,6 +884,9 @@ export default function SurveyCreatePage() {
           elements: page.elements.map((element) => ({
             ...element,
             id: idRemap.get(element.id) || element.id,
+            conditionalRequiredSourceId: element.conditionalRequiredSourceId
+              ? idRemap.get(element.conditionalRequiredSourceId) || element.conditionalRequiredSourceId
+              : undefined,
           })),
         })),
       );
@@ -606,6 +895,12 @@ export default function SurveyCreatePage() {
     return true;
   };
   const saveDraft = async () => {
+    setError("");
+    setMessage("");
+    if (!validateEventSchedule()) {
+      return;
+    }
+
     const payload: DraftPayload = {
       surveyTitle,
       surveyDesc,
@@ -654,12 +949,30 @@ export default function SurveyCreatePage() {
       return;
     }
 
+    const configUpdate = await updateEventConfiguration(surveyId, {
+      LogoUrl: logo || null,
+      BackgroundColor: bgColor || null,
+      BackgroundImageUrl: bgImage || null,
+      FontFamily: font === "default" ? null : font,
+    });
+    if (!configUpdate.success) {
+      setMessage("Draft tersimpan, tetapi style belum tersimpan ke server.");
+      return;
+    }
+
     setMessage("Draft tersimpan");
   };
 
   const publish = async () => {
-    if (pages.length === 0) {
-      setError("Minimal ada 1 page sebelum publish");
+    setError("");
+    setMessage("");
+    if (!validateEventSchedule()) {
+      return;
+    }
+
+    const hasQuestion = pages.some((page) => page.elements.length > 0);
+    if (!hasQuestion) {
+      setError("Minimal ada 1 pertanyaan sebelum publish");
       return;
     }
 
@@ -699,6 +1012,17 @@ export default function SurveyCreatePage() {
       return;
     }
 
+    const configUpdate = await updateEventConfiguration(surveyId, {
+      LogoUrl: logo || null,
+      BackgroundColor: bgColor || null,
+      BackgroundImageUrl: bgImage || null,
+      FontFamily: font === "default" ? null : font,
+    });
+    if (!configUpdate.success) {
+      setError(configUpdate.message || "Publish berhasil, namun style belum tersimpan.");
+      return;
+    }
+
     router.push(`/admin/event-management/${surveyId}/operations`);
   };
 
@@ -725,85 +1049,336 @@ export default function SurveyCreatePage() {
     });
   };
 
+  const hasSelectedPreviewValue = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "string") return value.trim().length > 0;
+    if (typeof value === "number") return Number.isFinite(value) && value > 0;
+    return false;
+  };
+
+  const getMappedSelectionValues = (
+    selector: BuilderElement | null,
+    values: Record<string, unknown>,
+  ): string[] => {
+    if (!selector) return [];
+    const raw = values[selector.id];
+
+    if (Array.isArray(raw)) {
+      return Array.from(
+        new Set(raw.map((item) => String(item || "").trim()).filter(Boolean)),
+      );
+    }
+
+    if (typeof raw === "string" && raw.trim()) {
+      return [raw.trim()];
+    }
+
+    return [];
+  };
+
+  const toContextElementId = (baseId: string, appName: string): string => {
+    const safe = encodeURIComponent(appName.trim().toLowerCase());
+    return `${baseId}__app__${safe || "selected"}`;
+  };
+
+  const isConditionallyRequired = (
+    element: BuilderElement,
+    values: Record<string, unknown>,
+  ): boolean => {
+    if (!element.conditionalRequiredSourceId) return false;
+    const threshold = Math.min(
+      10,
+      Math.max(1, Math.round(Number(element.conditionalRequiredThreshold || 7))),
+    );
+    const sourceValue = Number(values[element.conditionalRequiredSourceId] || 0);
+    if (!Number.isFinite(sourceValue) || sourceValue <= 0) return false;
+    return sourceValue < threshold;
+  };
+
+  const hasMappedSelectorInPage = (elements: BuilderElement[]): boolean =>
+    elements.some(
+      (item) =>
+        (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+        (item.dataSource === "app_department" || item.dataSource === "app_function"),
+    );
+
+  const shouldShowVisibilityControl = (elements: BuilderElement[], elementIndex: number): boolean => {
+    const mappedSelectorIndex = elements.findIndex(
+      (item) =>
+        (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+        (item.dataSource === "app_department" || item.dataSource === "app_function"),
+    );
+    if (mappedSelectorIndex === -1 || elementIndex <= mappedSelectorIndex) return false;
+    const current = elements[elementIndex];
+    return ["rating", "likert", "matrix", "text", "date", "signature", "choice", "checkbox", "dropdown"].includes(current.type);
+  };
+
   if (loading) return <section className={styles.loading}>Memuat survey builder...</section>;
 
   return (
     <section className={styles.wrapper}>
       {error ? <div className={styles.alertError}>{error}</div> : null}
-      {message ? <div className={styles.alertSuccess}>{message}{shareLink ? (<div className={styles.shareRow}><span className={styles.shareLabel}>Share link:</span><button type="button" className={styles.copyButton} onClick={() => navigator.clipboard.writeText(shareLink)}>Copy</button><a className={styles.shareLink} href={shareLink} target="_blank" rel="noreferrer">{shareLink}</a></div>) : null}</div> : null}
+      {message ? <div className={styles.alertSuccess}>{message}</div> : null}
 
-      <div className={styles.builder}>
-        <aside className={styles.builderSidebar}>
-          <div className={styles.sidebarSection}>
-            <div className={styles.sidebarTitle}>Add Elements</div>
-            {ELEMENTS.map((item) => (
+      {showPreview ? (
+        <div className={styles.previewScreen}>
+          <div className={styles.previewTopbar}>
+            <div>
+              <h2 className={styles.previewTitle}>Survey Preview</h2>
+              <div className={styles.previewSub}>Mode tampilan responden</div>
+            </div>
+            <div className={styles.previewDeviceTabs} role="tablist" aria-label="Preview device mode">
               <button
-                key={item.type}
-                className={styles.typeBtn}
-                onClick={() => {
-                  if (pages.length === 0) addPage();
-                  const pageId = pages.length ? pages[pages.length - 1].id : pageCounter + 1;
-                  addElement(pageId, item.type);
-                }}
                 type="button"
+                role="tab"
+                aria-label="Computer View"
+                aria-selected={previewDevice === "desktop"}
+                className={`${styles.previewDeviceTab} ${previewDevice === "desktop" ? styles.previewDeviceTabActive : ""}`}
+                onClick={() => setPreviewDevice("desktop")}
               >
-                <span className={styles.typeIcon}>{item.icon}</span>
-                {item.label}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4.25 3h15.5A2.25 2.25 0 0 1 22 5.25v10.5A2.25 2.25 0 0 1 19.75 18h-4.25v2.5h1.75a.75.75 0 1 1 0 1.5H6.75a.75.75 0 1 1 0-1.5H8.5V18H4.25A2.25 2.25 0 0 1 2 15.75V5.25A2.25 2.25 0 0 1 4.25 3Zm5.75 17.5h4V18h-4v2.5Z" />
+                </svg>
+                <span>Computer</span>
               </button>
-            ))}
+              <button
+                type="button"
+                role="tab"
+                aria-label="Mobile View"
+                aria-selected={previewDevice === "mobile"}
+                className={`${styles.previewDeviceTab} ${previewDevice === "mobile" ? styles.previewDeviceTabActive : ""}`}
+                onClick={() => setPreviewDevice("mobile")}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8.25 2h7.5A2.25 2.25 0 0 1 18 4.25v15.5A2.25 2.25 0 0 1 15.75 22h-7.5A2.25 2.25 0 0 1 6 19.75V4.25A2.25 2.25 0 0 1 8.25 2Zm0 1.5a.75.75 0 0 0-.75.75v15.5c0 .414.336.75.75.75h7.5a.75.75 0 0 0 .75-.75V4.25a.75.75 0 0 0-.75-.75h-7.5Z" />
+                </svg>
+                <span>Mobile</span>
+              </button>
+            </div>
+            <button className={styles.inlineButton} type="button" onClick={() => setShowPreview(false)}>Back to Form Builder</button>
           </div>
+          <div className={styles.previewViewportWrap}>
+            <div
+              className={`${styles.previewViewport} ${
+                previewDevice === "mobile" ? styles.previewViewportMobile : styles.previewViewportDesktop
+              }`}
+            >
+              <div className={styles.previewFullBody}>
+                {logo ? (
+                  <div className={styles.previewSurveyBrand}>
+                    <img src={logo} alt="Survey logo" className={styles.previewSurveyLogo} />
+                  </div>
+                ) : null}
+                <h3>{surveyTitle || "Survey Title"}</h3>
+                {surveyDesc.trim() ? <p>{surveyDesc}</p> : null}
+                {pages.map((p) => (
+                  <div key={`pv-${p.id}`} className={styles.previewPage}>
+                    <h4>{p.title}</h4>
+                    {(() => {
+                  const mappedSelectorIndex = p.elements.findIndex(
+                    (item) =>
+                      (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+                      (item.dataSource === "app_department" || item.dataSource === "app_function"),
+                  );
 
-          <div className={styles.sidebarSection}>
-            <div className={styles.sidebarTitle}>Templates</div>
-            <button className={styles.sideAction} type="button" onClick={() => setMessage("Load Template: WIP")}>Load Template</button>
+                  const mappedSelector = mappedSelectorIndex >= 0 ? p.elements[mappedSelectorIndex] : null;
+                  const selectedMappedApps = getMappedSelectionValues(mappedSelector, previewValues);
+
+                  const beforeSelector = mappedSelectorIndex >= 0
+                    ? p.elements.slice(0, mappedSelectorIndex + 1)
+                    : p.elements;
+                  const afterSelector = mappedSelectorIndex >= 0 ? p.elements.slice(mappedSelectorIndex + 1) : [];
+                  const repeatableAfterSelector = afterSelector.filter(
+                    (item) => item.displayCondition === "after_mapped_selection",
+                  );
+                  const alwaysVisibleAfterSelector = afterSelector.filter(
+                    (item) => item.displayCondition !== "after_mapped_selection",
+                  );
+
+                  return (
+                    <>
+                      {beforeSelector.map((el, elIndex) => (
+                        <div key={`pve-base-${p.id}-${el.id}-${elIndex}`} className={styles.previewQuestion}>
+                          {(() => {
+                            const effectiveRequired = el.required || isConditionallyRequired(el, previewValues);
+                            const effectiveElement = { ...el, required: effectiveRequired };
+                            return (
+                              <>
+                                {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title || "Question"}{effectiveElement.required ? " *" : ""}</div> : null}
+                                {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                <SurveyPreviewElement
+                                  element={effectiveElement}
+                                  allElements={allBuilderElements}
+                                  values={previewValues}
+                                  onSetValue={setPreviewValue}
+                                  onSetValuesBulk={setPreviewValuesBulk}
+                                  onToggleCheckbox={togglePreviewCheckbox}
+                                  orgData={{
+                                    businessUnits: orgBusinessUnits,
+                                    divisions: orgDivisions,
+                                    departments: orgDepartments,
+                                    functions: orgFunctions,
+                                    mappedApplicationsByDepartment,
+                                    mappedApplicationsByFunction,
+                                  }}
+                                />
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ))}
+
+                      {mappedSelector && repeatableAfterSelector.length > 0 && hasSelectedPreviewValue(previewValues[mappedSelector.id]) ? (
+                        selectedMappedApps.map((appName) => (
+                          <div key={`pve-app-group-${p.id}-${appName}`} className={styles.previewAppGroup}>
+                            <div className={styles.previewAppGroupTitle}>{appName}</div>
+                            {repeatableAfterSelector.map((el, elIndex) => {
+                              const contextSourceId = el.conditionalRequiredSourceId
+                                ? toContextElementId(el.conditionalRequiredSourceId, appName)
+                                : undefined;
+                              const contextElement = {
+                                ...el,
+                                id: toContextElementId(el.id, appName),
+                                title: `${el.title || "Question"} (${appName})`,
+                                conditionalRequiredSourceId: contextSourceId,
+                              };
+                              const effectiveRequired = contextElement.required || isConditionallyRequired(contextElement, previewValues);
+                              const effectiveElement = { ...contextElement, required: effectiveRequired };
+                              return (
+                                <div key={`pve-app-${p.id}-${el.id}-${elIndex}-${appName}`} className={styles.previewQuestion}>
+                                  {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div> : null}
+                                  {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                  <SurveyPreviewElement
+                                    element={effectiveElement}
+                                    allElements={allBuilderElements}
+                                    values={previewValues}
+                                    onSetValue={setPreviewValue}
+                                    onSetValuesBulk={setPreviewValuesBulk}
+                                    onToggleCheckbox={togglePreviewCheckbox}
+                                    orgData={{
+                                      businessUnits: orgBusinessUnits,
+                                      divisions: orgDivisions,
+                                      departments: orgDepartments,
+                                      functions: orgFunctions,
+                                      mappedApplicationsByDepartment,
+                                      mappedApplicationsByFunction,
+                                    }}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))
+                      ) : null}
+
+                      {alwaysVisibleAfterSelector.map((el, elIndex) => (
+                        <div key={`pve-always-${p.id}-${el.id}-${elIndex}`} className={styles.previewQuestion}>
+                          {(() => {
+                            const effectiveRequired = el.required || isConditionallyRequired(el, previewValues);
+                            const effectiveElement = { ...el, required: effectiveRequired };
+                            return (
+                              <>
+                                {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title || "Question"}{effectiveElement.required ? " *" : ""}</div> : null}
+                                {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                <SurveyPreviewElement
+                                  element={effectiveElement}
+                                  allElements={allBuilderElements}
+                                  values={previewValues}
+                                  onSetValue={setPreviewValue}
+                                  onSetValuesBulk={setPreviewValuesBulk}
+                                  onToggleCheckbox={togglePreviewCheckbox}
+                                  orgData={{
+                                    businessUnits: orgBusinessUnits,
+                                    divisions: orgDivisions,
+                                    departments: orgDepartments,
+                                    functions: orgFunctions,
+                                    mappedApplicationsByDepartment,
+                                    mappedApplicationsByFunction,
+                                  }}
+                                />
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                    </>
+                  );
+                    })()}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
+        </div>
+      ) : (
+        <div className={styles.builder}>
+          <aside className={styles.builderSidebar}>
+            <div className={styles.sidebarSection}>
+              <div className={styles.sidebarTitle}>Add Elements</div>
+              {ELEMENTS.map((item) => (
+                <button
+                  key={item.type}
+                  className={styles.typeBtn}
+                  onClick={() => addElementToLastPage(item.type)}
+                  type="button"
+                >
+                  <span className={styles.typeIcon}>{item.icon}</span>
+                  {item.label}
+                </button>
+              ))}
+            </div>
 
-          <div className={styles.sidebarSection}>
-            <div className={styles.sidebarTitle}>Actions</div>
-            <Link className={styles.sideAction} href="/admin/event-management">Back to Event Management</Link>
-            <button className={styles.sideAction} type="button" onClick={() => setShowPreview(true)}>Preview</button>
-            <button className={styles.sideAction} type="button" onClick={() => void saveDraft()} disabled={saving}>{saving ? "Saving..." : "Save Draft"}</button>
-            <button className={styles.sideActionPrimary} type="button" onClick={() => void publish()} disabled={publishing}>{publishing ? "Publishing..." : "Publish"}</button>
-          </div>
-        </aside>
+            <div className={styles.sidebarSection}>
+              <div className={styles.sidebarTitle}>Templates</div>
+              <button className={styles.sideAction} type="button" onClick={() => setMessage("Load Template: WIP")}>Load Template</button>
+            </div>
 
-        <main className={styles.builderMain} style={{ backgroundColor: bgColor, backgroundImage: bgImage ? `url(${bgImage})` : "none", fontFamily: FONT_MAP[font] }}>
-          <div className={styles.canvas}>
-            <div className={styles.topbar}>
-              <div className={styles.topLeft}><div className={styles.topTitle}>Survey Builder</div><div className={styles.topSub}>{scheduleSummary}</div></div>
-              <div className={styles.topCenter}>
-                <div className={styles.targetCard}>
-                  <div className={styles.targetTitle}>Target Survey</div>
-                  <div className={styles.targetGrid}>
-                    <label>Target Responden<input type="number" placeholder="Contoh: 100" value={targetRespondents} onChange={(e)=>setTargetRespondents(e.target.value)} /></label>
-                    <label>Target Score (1-10)<input type="number" min={1} max={10} step="0.1" placeholder="Contoh: 8.5" value={targetScore} onChange={(e)=>setTargetScore(e.target.value)} /></label>
+            <div className={styles.sidebarSection}>
+              <div className={styles.sidebarTitle}>Actions</div>
+              <Link className={styles.sideAction} href="/admin/event-management">Back to Event Management</Link>
+              <button className={styles.sideAction} type="button" onClick={() => setShowPreview(true)}>Preview</button>
+              <button className={styles.sideAction} type="button" onClick={() => void saveDraft()} disabled={saving}>{saving ? "Saving..." : "Save Draft"}</button>
+              <button className={styles.sideActionPrimary} type="button" onClick={() => void publish()} disabled={publishing}>{publishing ? "Publishing..." : "Publish"}</button>
+            </div>
+          </aside>
+
+          <main className={styles.builderMain} style={{ backgroundColor: bgColor, backgroundImage: bgImage ? `url(${bgImage})` : "none", fontFamily: FONT_MAP[font] }}>
+            <div className={styles.canvas}>
+              <div className={styles.topbar}>
+                <div className={styles.topLeft}><div className={styles.topTitle}>Survey Builder</div><div className={styles.topSub}>{scheduleSummary}</div></div>
+                <div className={styles.topCenter}>
+                  <div className={styles.targetCard}>
+                    <div className={styles.targetTitle}>Target Survey</div>
+                    <div className={styles.targetGrid}>
+                      <label>Target Responden<input type="number" placeholder="Contoh: 100" value={targetRespondents} onChange={(e)=>setTargetRespondents(e.target.value)} /></label>
+                      <label>Target Score (1-10)<input type="number" min={1} max={10} step="0.1" placeholder="Contoh: 8.5" value={targetScore} onChange={(e)=>setTargetScore(e.target.value)} /></label>
+                    </div>
                   </div>
                 </div>
+                <div className={styles.topActions}>
+                  <button className={styles.inlineButton} type="button" onClick={() => setShowSchedule(true)}>Settings</button>
+                  <button className={styles.inlineButton} type="button" onClick={() => setShowStyle(true)}>Style</button>
+                </div>
               </div>
-              <div className={styles.topActions}>
-                <button className={styles.inlineButton} type="button" onClick={() => setShowSchedule(true)}>Settings</button>
-                <button className={styles.inlineButton} type="button" onClick={() => setShowStyle(true)}>Style</button>
+
+              <div className={styles.brandPreview}>
+                <div className={styles.brandLogo}>{logo ? <img src={logo} alt="Logo" /> : <span>Your Logo</span>}</div>
+                <div><div className={styles.brandLabel}>Style Preview</div><div className={styles.brandText}>{styleSummary}</div></div>
               </div>
-            </div>
 
-            <div className={styles.brandPreview}>
-              <div className={styles.brandLogo}>{logo ? <img src={logo} alt="Logo" /> : <span>Your Logo</span>}</div>
-              <div><div className={styles.brandLabel}>Style Preview</div><div className={styles.brandText}>{styleSummary}</div></div>
-            </div>
+              <div className={styles.surveyCard}>
+                <input className={styles.surveyTitle} placeholder="Survey Title" value={surveyTitle} onChange={(e)=>setSurveyTitle(e.target.value)} />
+                <input className={styles.surveyDesc} placeholder="Survey description" value={surveyDesc} onChange={(e)=>setSurveyDesc(e.target.value)} />
+              </div>
 
-            <div className={styles.surveyCard}>
-              <input className={styles.surveyTitle} placeholder="Survey Title" value={surveyTitle} onChange={(e)=>setSurveyTitle(e.target.value)} />
-              <input className={styles.surveyDesc} placeholder="Survey description" value={surveyDesc} onChange={(e)=>setSurveyDesc(e.target.value)} />
-            </div>
-
-            <div className={styles.pagesWrap}>
-              {pages.length === 0 ? <div className={styles.emptyPage}>No pages yet. Use Add Page to get started.</div> : null}
+              <div className={styles.pagesWrap}>
+                {pages.length === 0 ? <div className={styles.emptyPage}>No pages yet. Use Add Page to get started.</div> : null}
 
               {pages.map((page) => (
                 <article key={page.id} className={[styles.pageCard, draggingPageId === page.id ? styles.pageCardDragging : "", dragOverPageId === page.id && draggingPageId !== page.id ? styles.pageCardDragOver : ""].join(" ") } onDragOver={onPageDragOver(page.id)} onDrop={onPageDrop(page.id)}>
                   <div className={styles.pageHeader}>
                     <div className={styles.pageTitleWrap}><span className={styles.drag} draggable onDragStart={onPageDragStart(page.id)} onDragEnd={onPageDragEnd} aria-label="Drag page">{"\u2630"}</span><input value={page.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,title:e.target.value}:p))} className={styles.pageTitleInput} /></div>
-                    <button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.filter((p)=>p.id!==page.id))}>Delete Page</button>
+                    <button className={styles.inlineButton} type="button" onClick={() => removePage(page.id)}>Delete Page</button>
                   </div>
 
                   {page.elements.map((el, elIndex) => (
@@ -848,6 +1423,9 @@ export default function SurveyCreatePage() {
                               <option value="bu">Master: Business Unit</option>
                               <option value="division">Master: Division</option>
                               <option value="department">Master: Department</option>
+                              <option value="function">Master: Function</option>
+                              <option value="app_department">Mapped: Applications by Department</option>
+                              <option value="app_function">Mapped: Applications by Function</option>
                             </select>
                             {el.dataSource && el.dataSource !== "manual" ? <span className={styles.dataSourceBadge}>Using master data</span> : null}
                           </div>
@@ -873,6 +1451,265 @@ export default function SurveyCreatePage() {
                           {el.dataSource === "manual" ? (
                             <button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:[...item.options,`Option ${item.options.length+1}`]}:item)}:p))}>+ Add option</button>
                           ) : null}
+                          {el.dataSource === "app_department" ? (
+                            <div className={styles.mappingHint}>
+                              Options akan diisi otomatis dari mapping aplikasi berdasarkan Department yang dipilih di preview.
+                            </div>
+                          ) : null}
+                          {el.dataSource === "app_function" ? (
+                            <div className={styles.mappingHint}>
+                              Options akan diisi otomatis dari mapping aplikasi berdasarkan Function yang dipilih di preview.
+                            </div>
+                          ) : null}
+
+                          {(el.type === "choice" || el.type === "checkbox") ? (
+                            <div className={styles.settingPanel}>
+                              <div className={styles.settingRow}>
+                                <label className={styles.settingLabel}>Layout</label>
+                                <select
+                                  className={styles.settingSelect}
+                                  value={el.optionLayout || "vertical"}
+                                  onChange={(e) =>
+                                    setPages((prev) =>
+                                      prev.map((p) =>
+                                        p.id === page.id
+                                          ? {
+                                              ...p,
+                                              elements: p.elements.map((item) =>
+                                                item.id === el.id
+                                                  ? { ...item, optionLayout: e.target.value as "vertical" | "horizontal" }
+                                                  : item,
+                                              ),
+                                            }
+                                          : p,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  <option value="vertical">Vertical</option>
+                                  <option value="horizontal">Horizontal</option>
+                                </select>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {shouldShowVisibilityControl(page.elements, elIndex) && hasMappedSelectorInPage(page.elements) ? (
+                        <div className={styles.settingPanel}>
+                          <div className={styles.settingRow}>
+                            <label className={styles.settingLabel}>Visibility</label>
+                            <select
+                              className={styles.settingSelect}
+                              value={el.displayCondition || "always"}
+                              onChange={(e) =>
+                                setPages((prev) =>
+                                  prev.map((p) =>
+                                    p.id === page.id
+                                      ? {
+                                          ...p,
+                                          elements: p.elements.map((item) =>
+                                            item.id === el.id
+                                              ? { ...item, displayCondition: e.target.value as "always" | "after_mapped_selection" }
+                                              : item,
+                                          ),
+                                        }
+                                      : p,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="always">Always show</option>
+                              <option value="after_mapped_selection">Show after mapped app selected</option>
+                            </select>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {el.type === "rating" ? (
+                        <div className={styles.optionList}>
+                          <div className={styles.optionRow}>
+                            <label style={{ fontSize: "12px", color: "#374151", minWidth: "120px" }}>
+                              Rating Scale
+                            </label>
+                            <input
+                              type="number"
+                              min={3}
+                              max={10}
+                              value={el.options[0] || "10"}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                setPages((prev) =>
+                                  prev.map((p) =>
+                                    p.id === page.id
+                                      ? {
+                                          ...p,
+                                          elements: p.elements.map((item) =>
+                                            item.id === el.id
+                                              ? { ...item, options: [next || "10"] }
+                                              : item,
+                                          ),
+                                        }
+                                      : p,
+                                  ),
+                                );
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {(["likert", "matrix"] as ElementType[]).includes(el.type) ? (
+                        <div className={styles.optionList}>
+                          {el.options.map((opt, idx) => (
+                            <div key={`${el.id}-${idx}`} className={styles.optionRow}>
+                              <input
+                                value={opt}
+                                onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.map((ov,oi)=>oi===idx?e.target.value:ov)}:item)}:p))}
+                              />
+                              <button
+                                type="button"
+                                className={styles.optionDelete}
+                                onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:item.options.length>1?item.options.filter((_,oi)=>oi!==idx):item.options}:item)}:p))}
+                              >
+                                {"\u00D7"}
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            className={styles.inlineButton}
+                            type="button"
+                            onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,options:[...item.options,el.type==="likert"?`Statement ${item.options.length+1}`:`Column ${item.options.length+1}`]}:item)}:p))}
+                          >
+                            + Add {el.type === "likert" ? "statement" : "column"}
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {el.type === "text" ? (
+                        <div className={styles.settingPanel}>
+                          {(() => {
+                            const ratingCandidates = page.elements.filter(
+                              (item, idx) => idx < elIndex && item.type === "rating",
+                            );
+                            const hasCandidates = ratingCandidates.length > 0;
+                            const thresholdValue = Math.min(
+                              10,
+                              Math.max(1, Math.round(Number(el.conditionalRequiredThreshold || 7))),
+                            );
+                            const enabled = Boolean(el.conditionalRequiredSourceId);
+                            const selectedSourceId = hasCandidates
+                              ? (el.conditionalRequiredSourceId && ratingCandidates.some((item) => item.id === el.conditionalRequiredSourceId)
+                                ? el.conditionalRequiredSourceId
+                                : ratingCandidates[ratingCandidates.length - 1].id)
+                              : "";
+
+                            return (
+                              <>
+                                <div className={styles.settingRow}>
+                                  <label className={styles.settingLabel}>Comment Rule</label>
+                                  <label className={styles.settingCheckLabel}>
+                                    <input
+                                      type="checkbox"
+                                      disabled={!hasCandidates}
+                                      checked={enabled}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setPages((prev) =>
+                                          prev.map((p) =>
+                                            p.id === page.id
+                                              ? {
+                                                  ...p,
+                                                  elements: p.elements.map((item) =>
+                                                    item.id === el.id
+                                                      ? {
+                                                          ...item,
+                                                          conditionalRequiredSourceId: checked ? (selectedSourceId || undefined) : undefined,
+                                                          conditionalRequiredThreshold: checked ? thresholdValue : undefined,
+                                                        }
+                                                      : item,
+                                                  ),
+                                                }
+                                              : p,
+                                          ),
+                                        );
+                                      }}
+                                    />
+                                    <span>Wajib isi jika rating di bawah threshold</span>
+                                  </label>
+                                </div>
+                                {!hasCandidates ? (
+                                  <div className={styles.settingHint}>Tambahkan elemen rating di atas komentar ini agar rule bisa diaktifkan.</div>
+                                ) : null}
+                                {enabled && hasCandidates ? (
+                                  <>
+                                    <div className={styles.settingRow}>
+                                      <label className={styles.settingLabel}>Rating Source</label>
+                                      <select
+                                        className={styles.settingSelect}
+                                        value={el.conditionalRequiredSourceId || selectedSourceId}
+                                        onChange={(e) =>
+                                          setPages((prev) =>
+                                            prev.map((p) =>
+                                              p.id === page.id
+                                                ? {
+                                                    ...p,
+                                                    elements: p.elements.map((item) =>
+                                                      item.id === el.id
+                                                        ? {
+                                                            ...item,
+                                                            conditionalRequiredSourceId: e.target.value || undefined,
+                                                          }
+                                                        : item,
+                                                    ),
+                                                  }
+                                                : p,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        {ratingCandidates.map((item, idx) => (
+                                          <option key={`${el.id}-rating-source-${item.id}`} value={item.id}>
+                                            {item.title || `Rating ${idx + 1}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className={styles.settingRow}>
+                                      <label className={styles.settingLabel}>Threshold</label>
+                                      <input
+                                        className={styles.settingSelect}
+                                        type="number"
+                                        min={1}
+                                        max={10}
+                                        value={thresholdValue}
+                                        onChange={(e) => {
+                                          const next = Math.min(10, Math.max(1, Number(e.target.value || 7)));
+                                          setPages((prev) =>
+                                            prev.map((p) =>
+                                              p.id === page.id
+                                                ? {
+                                                    ...p,
+                                                    elements: p.elements.map((item) =>
+                                                      item.id === el.id
+                                                        ? {
+                                                            ...item,
+                                                            conditionalRequiredThreshold: next,
+                                                          }
+                                                        : item,
+                                                    ),
+                                                  }
+                                                : p,
+                                            ),
+                                          );
+                                        }}
+                                      />
+                                    </div>
+                                  </>
+                                ) : null}
+                              </>
+                            );
+                          })()}
                         </div>
                       ) : null}
 
@@ -885,53 +1722,16 @@ export default function SurveyCreatePage() {
               ))}
 
               <button className={styles.addPage} type="button" onClick={addPage}>+ Add Page</button>
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      )}
 
       {showSchedule ? <div className={styles.overlay} onClick={()=>setShowSchedule(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Schedule Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowSchedule(false)}>Close</button></div><div className={styles.modalBody}><label>Start Date<input type="date" value={scheduleStart} onChange={(e)=>setScheduleStart(e.target.value)} /></label><label>End Date<input type="date" value={scheduleEnd} onChange={(e)=>setScheduleEnd(e.target.value)} /></label></div></div></div> : null}
 
       {showStyle ? <div className={styles.overlay} onClick={()=>setShowStyle(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Style Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowStyle(false)}>Close</button></div><div className={styles.modalBody}><label>Your Logo<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setLogo)} /></label><label>Background Color<input type="color" value={bgColor} onChange={(e)=>setBgColor(e.target.value)} /></label><label>Background Image<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setBgImage)} /></label><label>Font<select value={font} onChange={(e)=>setFont(e.target.value as FontPreset)}><option value="default">Default</option><option value="georgia">Georgia</option><option value="trebuchet">Trebuchet MS</option><option value="verdana">Verdana</option><option value="tahoma">Tahoma</option><option value="courier">Courier New</option></select></label></div></div></div> : null}
 
-      {showPreview ? (
-        <div className={styles.overlay} onClick={() => setShowPreview(false)}>
-          <div className={styles.preview} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHead}>
-              <h2>Survey Preview</h2>
-              <button className={styles.inlineButton} type="button" onClick={() => setShowPreview(false)}>Back to Builder</button>
-            </div>
-            <div className={styles.previewBody}>
-              <h3>{surveyTitle || "Survey Title"}</h3>
-              <p>{surveyDesc || "Survey description"}</p>
-              {pages.map((p) => (
-                <div key={`pv-${p.id}`} className={styles.previewPage}>
-                  <h4>{p.title}</h4>
-                  {p.elements.map((el, elIndex) => (
-                    <div key={`pve-${p.id}-${el.id}-${elIndex}`} className={styles.previewQuestion}>
-                      {el.type !== "hero" ? <div className={styles.previewLabel}>{el.title || "Question"}{el.required ? " *" : ""}</div> : null}
-                      {el.type !== "hero" && el.subtitle ? <small>{el.subtitle}</small> : null}
-                      <SurveyPreviewElement
-                        element={el}
-                        allElements={allBuilderElements}
-                        values={previewValues}
-                        onSetValue={setPreviewValue}
-                        onSetValuesBulk={setPreviewValuesBulk}
-                        onToggleCheckbox={togglePreviewCheckbox}
-                        orgData={{
-                          businessUnits: orgBusinessUnits,
-                          divisions: orgDivisions,
-                          departments: orgDepartments,
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

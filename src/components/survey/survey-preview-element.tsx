@@ -1,10 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useMemo, useRef } from "react";
 import type { BusinessUnitOption, DepartmentOption, DivisionOption } from "@/lib/org-hierarchy";
+import type { FunctionMaster } from "@/lib/master-data";
 import styles from "@/app/(admin)/admin/event-management/survey-create/survey-create.module.css";
 
 type ElementType = "hero" | "text" | "choice" | "checkbox" | "dropdown" | "rating" | "likert" | "matrix" | "date" | "signature";
-type DataSourceType = "manual" | "bu" | "division" | "department";
+type DataSourceType =
+  | "manual"
+  | "bu"
+  | "division"
+  | "department"
+  | "function"
+  | "app_department"
+  | "app_function";
 
 export interface PreviewElement {
   id: string;
@@ -15,6 +23,10 @@ export interface PreviewElement {
   options: string[];
   coverUrl: string;
   dataSource?: DataSourceType;
+  optionLayout?: "vertical" | "horizontal";
+  displayCondition?: "always" | "after_mapped_selection";
+  conditionalRequiredSourceId?: string;
+  conditionalRequiredThreshold?: number;
 }
 
 function SignaturePad({ value, onChange }: { value?: string; onChange: (value: string) => void }) {
@@ -119,119 +131,189 @@ interface Props {
     businessUnits: BusinessUnitOption[];
     divisions: DivisionOption[];
     departments: DepartmentOption[];
+    functions: FunctionMaster[];
+    mappedApplicationsByDepartment: string[];
+    mappedApplicationsByFunction: string[];
   };
 }
 
-function inferProfileField(element: PreviewElement): "bu" | "division" | "department" | null {
+function inferProfileField(element: PreviewElement): "bu" | "division" | "department" | "function" | null {
   if (element.dataSource === "bu") return "bu";
   if (element.dataSource === "division") return "division";
   if (element.dataSource === "department") return "department";
+  if (element.dataSource === "function") return "function";
 
-  const title = (element.title || "").toLowerCase();
+  const title = (element.title || "").trim().toLowerCase();
   if (title.includes("business unit") || title === "bu") return "bu";
-  if (title.includes("divisi") || title.includes("division")) return "division";
+  if (title.includes("division") || title.includes("divisi") || title === "div") return "division";
   if (title.includes("department") || title.includes("departemen") || title.includes("dept")) return "department";
+  if (title.includes("function")) return "function";
   return null;
+}
+
+function getUniqueOptions(options: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+
+  options.forEach((raw) => {
+    const normalized = String(raw ?? "").trim();
+    if (!normalized) return;
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    unique.push(normalized);
+  });
+
+  return unique;
+}
+
+type DropdownOptionEntry = {
+  value: string;
+  label: string;
+};
+
+function sameId(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 export default function SurveyPreviewElement({ element, allElements, values, onSetValue, onSetValuesBulk, onToggleCheckbox, orgData }: Props) {
   const buElement = useMemo(() => allElements.find((item) => inferProfileField(item) === "bu"), [allElements]);
   const divisionElement = useMemo(() => allElements.find((item) => inferProfileField(item) === "division"), [allElements]);
   const departmentElement = useMemo(() => allElements.find((item) => inferProfileField(item) === "department"), [allElements]);
+  const functionElement = useMemo(() => allElements.find((item) => inferProfileField(item) === "function"), [allElements]);
 
-  const selectedBusinessUnit = buElement ? String(values[buElement.id] || "") : "";
-  const selectedDivision = divisionElement ? String(values[divisionElement.id] || "") : "";
-  const isCorporateHo = selectedBusinessUnit.trim().toLowerCase() === "corporate ho";
+  const selectedBusinessUnitId = buElement ? String(values[buElement.id] || "") : "";
+  const selectedDivisionId = divisionElement ? String(values[divisionElement.id] || "") : "";
 
-  const optionSet = useMemo(() => {
-    if (element.type !== "dropdown") return element.options;
-
+  const profileOptionEntries = useMemo<DropdownOptionEntry[]>(() => {
+    if (element.type !== "dropdown") return [];
     const field = inferProfileField(element);
+
     if (field === "bu") {
-      return element.dataSource === "bu"
-        ? orgData.businessUnits.map((item) => item.Name)
-        : element.options;
+      return orgData.businessUnits.map((item) => ({
+        value: item.BusinessUnitId,
+        label: item.Name,
+      }));
     }
 
     if (field === "division") {
-      if (!selectedBusinessUnit) {
-        return element.dataSource === "division"
-          ? orgData.divisions.map((item) => item.Name)
-          : element.options;
-      }
-
-      if (!isCorporateHo) {
-        return [selectedBusinessUnit];
-      }
-
-      const bu = orgData.businessUnits.find((item) => item.Name.toLowerCase() === selectedBusinessUnit.toLowerCase());
-      if (!bu) return element.options;
-
+      if (!selectedBusinessUnitId) return [];
       return orgData.divisions
-        .filter((item) => item.BusinessUnitId === bu.BusinessUnitId)
-        .map((item) => item.Name);
+        .filter((item) => sameId(item.BusinessUnitId, selectedBusinessUnitId))
+        .map((item) => ({
+          value: item.DivisionId,
+          label: item.Name,
+        }));
     }
 
     if (field === "department") {
-      if (!selectedBusinessUnit) {
-        return element.dataSource === "department"
-          ? orgData.departments.map((item) => item.Name)
-          : element.options;
-      }
-
-      if (!isCorporateHo) {
-        return [selectedBusinessUnit];
-      }
-
-      const bu = orgData.businessUnits.find((item) => item.Name.toLowerCase() === selectedBusinessUnit.toLowerCase());
-      if (!bu) return element.options;
+      if (!selectedBusinessUnitId) return [];
 
       const buDivisionIds = orgData.divisions
-        .filter((item) => item.BusinessUnitId === bu.BusinessUnitId)
+        .filter((item) => sameId(item.BusinessUnitId, selectedBusinessUnitId))
         .map((item) => item.DivisionId);
 
       let departmentPool = orgData.departments.filter((item) => buDivisionIds.includes(item.DivisionId));
-
-      if (selectedDivision) {
-        const selectedDivisionRow = orgData.divisions.find((item) => item.Name.toLowerCase() === selectedDivision.toLowerCase());
-        if (selectedDivisionRow) {
-          departmentPool = departmentPool.filter((item) => item.DivisionId === selectedDivisionRow.DivisionId);
-        }
+      if (selectedDivisionId) {
+        departmentPool = departmentPool.filter((item) => sameId(item.DivisionId, selectedDivisionId));
       }
 
-      return departmentPool.map((item) => item.Name);
+      const duplicateCounter = departmentPool.reduce<Record<string, number>>((acc, item) => {
+        const key = item.Name.toLowerCase();
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      return departmentPool.map((item) => {
+        const divisionName = orgData.divisions.find((div) => div.DivisionId === item.DivisionId)?.Name || "";
+        const isDuplicateName = duplicateCounter[item.Name.toLowerCase()] > 1;
+        return {
+          value: item.DepartmentId,
+          label: isDuplicateName ? `${item.Name} (${divisionName})` : item.Name,
+        };
+      });
+    }
+
+    if (field === "function") {
+      return orgData.functions.map((item) => ({
+        value: item.FunctionId,
+        label: item.Name,
+      }));
+    }
+
+    return [];
+  }, [
+    element,
+    orgData.businessUnits,
+    orgData.departments,
+    orgData.divisions,
+    orgData.functions,
+    selectedBusinessUnitId,
+    selectedDivisionId,
+  ]);
+
+  const optionSet = useMemo(() => {
+    const supportsOptionDataSource =
+      element.type === "dropdown" || element.type === "choice" || element.type === "checkbox";
+    if (!supportsOptionDataSource) return element.options;
+
+    const field = inferProfileField(element);
+    if (field && element.type === "dropdown") return element.options;
+
+    if (element.dataSource === "app_department") {
+      return orgData.mappedApplicationsByDepartment.length > 0
+        ? orgData.mappedApplicationsByDepartment
+        : element.options;
+    }
+
+    if (element.dataSource === "app_function") {
+      return orgData.mappedApplicationsByFunction.length > 0
+        ? orgData.mappedApplicationsByFunction
+        : element.options;
     }
 
     return element.options;
   }, [
     element,
-    isCorporateHo,
-    orgData.businessUnits,
-    orgData.departments,
-    orgData.divisions,
-    selectedBusinessUnit,
-    selectedDivision,
+    orgData.mappedApplicationsByDepartment,
+    orgData.mappedApplicationsByFunction,
   ]);
+  const uniqueOptionSet = useMemo(() => getUniqueOptions(optionSet), [optionSet]);
+
+  const mappedEmptyMessage = useMemo(() => {
+    if (element.dataSource === "app_department") {
+      return "Belum ada aplikasi dari mapping Department. Pilih Department yang memiliki mapping.";
+    }
+    if (element.dataSource === "app_function") {
+      return "Belum ada aplikasi dari mapping Function. Pilih Function yang memiliki mapping.";
+    }
+    return "";
+  }, [element.dataSource]);
 
   if (element.type === "hero") {
     return (
       <div className={styles.previewHero}>
         {element.coverUrl ? <img src={element.coverUrl} alt="hero" className={styles.previewHeroImage} /> : <div className={styles.previewHeroPlaceholder}>Hero image</div>}
-        <div className={styles.previewHeroTitle}>{element.title || "Hero title"}</div>
+        {element.title.trim() ? <div className={styles.previewHeroTitle}>{element.title}</div> : null}
         {element.subtitle ? <div className={styles.previewHeroSubtitle}>{element.subtitle}</div> : null}
       </div>
     );
   }
 
   if (element.type === "text") {
-    return <input className={styles.previewInput} placeholder={element.title || "Text input"} value={String(values[element.id] || "")} onChange={(e) => onSetValue(element.id, e.target.value)} />;
+    return <input className={styles.previewInput} required={element.required} placeholder={element.title || "Text input"} value={String(values[element.id] || "")} onChange={(e) => onSetValue(element.id, e.target.value)} />;
   }
 
   if (element.type === "choice") {
+    if (uniqueOptionSet.length === 0 && mappedEmptyMessage) {
+      return <div className={styles.previewHint}>{mappedEmptyMessage}</div>;
+    }
     return (
-      <div className={styles.previewOptions}>
-        {element.options.map((option) => (
-          <label key={`${element.id}-${option}`} className={styles.previewOptionItem}>
+      <div className={`${styles.previewOptions} ${element.optionLayout === "horizontal" ? styles.previewOptionsHorizontal : styles.previewOptionsVertical}`}>
+        {uniqueOptionSet.map((option, idx) => (
+          <label key={`${element.id}-${option}-${idx}`} className={styles.previewOptionItem}>
             <input type="radio" name={element.id} checked={values[element.id] === option} onChange={() => onSetValue(element.id, option)} />
             <span>{option}</span>
           </label>
@@ -241,11 +323,14 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "checkbox") {
+    if (uniqueOptionSet.length === 0 && mappedEmptyMessage) {
+      return <div className={styles.previewHint}>{mappedEmptyMessage}</div>;
+    }
     const selected = Array.isArray(values[element.id]) ? (values[element.id] as string[]) : [];
     return (
-      <div className={styles.previewOptions}>
-        {element.options.map((option) => (
-          <label key={`${element.id}-${option}`} className={styles.previewOptionItem}>
+      <div className={`${styles.previewOptions} ${element.optionLayout === "horizontal" ? styles.previewOptionsHorizontal : styles.previewOptionsVertical}`}>
+        {uniqueOptionSet.map((option, idx) => (
+          <label key={`${element.id}-${option}-${idx}`} className={styles.previewOptionItem}>
             <input type="checkbox" checked={selected.includes(option)} onChange={() => onToggleCheckbox(element.id, option)} />
             <span>{option}</span>
           </label>
@@ -255,6 +340,14 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "dropdown") {
+    const field = inferProfileField(element);
+    const dropdownEntries: DropdownOptionEntry[] = field
+      ? profileOptionEntries
+      : uniqueOptionSet.map((option) => ({ value: option, label: option }));
+
+    if (dropdownEntries.length === 0 && mappedEmptyMessage) {
+      return <div className={styles.previewHint}>{mappedEmptyMessage}</div>;
+    }
     return (
       <select
         className={styles.previewSelect}
@@ -263,7 +356,6 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
           const value = e.target.value;
           onSetValue(element.id, value);
 
-          const field = inferProfileField(element);
           if (field === "bu" && divisionElement && departmentElement) {
             if (!value) {
               onSetValuesBulk({
@@ -273,10 +365,22 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
               return;
             }
 
-            if (value.trim().toLowerCase() !== "corporate ho") {
+            const selectedBu = orgData.businessUnits.find((item) => sameId(item.BusinessUnitId, value));
+            if ((selectedBu?.Name || "").trim().toLowerCase() !== "corporate ho") {
+              const divisionsInBu = orgData.divisions.filter((item) => sameId(item.BusinessUnitId, value));
+              const autoDivision = divisionsInBu.find(
+                (item) => item.Name.trim().toLowerCase() === (selectedBu?.Name || "").trim().toLowerCase(),
+              ) || divisionsInBu[0];
+              const departmentsInDivision = autoDivision
+                ? orgData.departments.filter((item) => item.DivisionId === autoDivision.DivisionId)
+                : [];
+              const autoDepartment = departmentsInDivision.find(
+                (item) => item.Name.trim().toLowerCase() === (selectedBu?.Name || "").trim().toLowerCase(),
+              ) || departmentsInDivision[0];
+
               onSetValuesBulk({
-                [divisionElement.id]: value,
-                [departmentElement.id]: value,
+                [divisionElement.id]: autoDivision?.DivisionId || "",
+                [departmentElement.id]: autoDepartment?.DepartmentId || "",
               });
             } else {
               onSetValuesBulk({
@@ -285,10 +389,20 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
               });
             }
           }
+          if (field === "division" && departmentElement) {
+            onSetValue(departmentElement.id, "");
+          }
+          if (field === "department" && functionElement) {
+            onSetValue(functionElement.id, "");
+          }
         }}
       >
         <option value="">-- Select --</option>
-        {optionSet.map((option) => <option key={`${element.id}-${option}`} value={option}>{option}</option>)}
+        {dropdownEntries.map((entry, idx) => (
+          <option key={`${element.id}-${entry.value}-${idx}`} value={entry.value}>
+            {entry.label}
+          </option>
+        ))}
       </select>
     );
   }
@@ -298,7 +412,8 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "rating") {
-    const max = Math.min(10, Math.max(3, Number(element.options?.[0] || 5)));
+    const parsedScale = Number(element.options?.[0] || 10);
+    const max = Number.isFinite(parsedScale) ? Math.min(10, Math.max(3, Math.round(parsedScale))) : 10;
     const current = Number(values[element.id] || 0);
     return (
       <div className={styles.previewRatingRow}>
@@ -310,13 +425,14 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "likert") {
-    const cols = ["1", "2", "3", "4", "5"];
+    const cols = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+    const rows = element.options.length > 0 ? element.options : ["Statement 1", "Statement 2"];
     return (
       <div className={styles.previewMatrixWrap}>
         <table className={styles.previewMatrixTable}>
           <thead><tr><th>Statement</th>{cols.map((c) => <th key={`${element.id}-c-${c}`}>{c}</th>)}</tr></thead>
           <tbody>
-            {element.options.map((row, rowIdx) => (
+            {rows.map((row, rowIdx) => (
               <tr key={`${element.id}-r-${rowIdx}`}>
                 <td>{row}</td>
                 {cols.map((col) => {
@@ -332,8 +448,8 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "matrix") {
-    const cols = element.options.length > 0 ? element.options : ["Column 1", "Column 2"];
-    const rows = ["Row 1", "Row 2", "Row 3"];
+    const cols = element.options.length > 0 ? element.options : ["Column 1", "Column 2", "Column 3"];
+    const rows = ["Row 1", "Row 2", "Row 3", "Row 4"];
     return (
       <div className={styles.previewMatrixWrap}>
         <table className={styles.previewMatrixTable}>

@@ -75,7 +75,7 @@ export default function MasterUserPage() {
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<"SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead">("AdminEvent");
-  const [newUseLdap, setNewUseLdap] = useState(false);
+  const [newUseLdap, setNewUseLdap] = useState(true);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([]);
   const [divisions, setDivisions] = useState<DivisionOption[]>([]);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
@@ -285,7 +285,7 @@ export default function MasterUserPage() {
     setNewDisplayName("");
     setNewEmail("");
     setNewRole("AdminEvent");
-    setNewUseLdap(false);
+    setNewUseLdap(true);
     setNewBusinessUnitId("");
     setNewDivisionId("");
     setNewDepartmentId("");
@@ -301,7 +301,7 @@ export default function MasterUserPage() {
     setNewDisplayName("");
     setNewEmail("");
     setNewRole("AdminEvent");
-    setNewUseLdap(false);
+    setNewUseLdap(true);
     setNewBusinessUnitId("");
     setNewDivisionId("");
     setNewDepartmentId("");

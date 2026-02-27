@@ -51,3 +51,9 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# local progress helper artifacts
+docs/progress-board.json
+scripts/check-progress.cmd
+scripts/check-progress.ps1
+scripts/check-progress.py
