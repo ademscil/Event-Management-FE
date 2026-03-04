@@ -1,0 +1,327 @@
+"use client";
+
+import { getAccessToken } from "@/lib/auth";
+
+const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
+
+type ApiResult<T> =
+  | { success: true; data: T }
+  | { success: false; message: string };
+
+export type ApprovalRespondent = {
+  ResponseId: string;
+  RespondentEmail: string;
+  RespondentName: string;
+  ApplicationId: string;
+  ApplicationName: string;
+  DepartmentId: string;
+  DepartmentName: string;
+  SubmittedAt: string;
+  DuplicateCount: number;
+  IsDuplicate: boolean;
+};
+
+export type ApprovalTakeout = {
+  QuestionResponseId: string;
+  ResponseId: string;
+  QuestionId: string;
+  CommentValue?: string | null;
+  NumericValue?: number | null;
+  TakeoutStatus?: string | null;
+  TakeoutReason?: string | null;
+  ProposedAt?: string | null;
+  QuestionText?: string | null;
+  RespondentEmail?: string | null;
+  RespondentName?: string | null;
+  ApplicationName?: string | null;
+  DepartmentName?: string | null;
+  SurveyId?: string | null;
+  SurveyTitle?: string | null;
+  FunctionId?: string | null;
+  FunctionName?: string | null;
+  ProposedByName?: string | null;
+};
+
+export type PendingApproval = {
+  QuestionResponseId: string;
+  ResponseId: string;
+  QuestionId: string;
+  TextValue?: string | null;
+  NumericValue?: number | null;
+  CommentValue?: string | null;
+  TakeoutStatus?: string | null;
+  TakeoutReason?: string | null;
+  ProposedAt?: string | null;
+  QuestionText?: string | null;
+  RespondentEmail?: string | null;
+  RespondentName?: string | null;
+  ApplicationName?: string | null;
+  DepartmentName?: string | null;
+  FunctionId?: string | null;
+  FunctionName?: string | null;
+  ProposedByName?: string | null;
+};
+
+export type ApprovalComment = {
+  QuestionResponseId: string;
+  ResponseId: string;
+  QuestionId: string;
+  CommentValue?: string | null;
+  NumericValue?: number | null;
+  IsBestComment?: boolean;
+  QuestionText?: string | null;
+  QuestionOrder?: number | null;
+  RespondentEmail?: string | null;
+  RespondentName?: string | null;
+  SubmittedAt?: string | null;
+  ApplicationId?: string | null;
+  ApplicationName?: string | null;
+  DepartmentId?: string | null;
+  DepartmentName?: string | null;
+  SurveyId?: string | null;
+  SurveyTitle?: string | null;
+  FunctionId?: string | null;
+  FunctionName?: string | null;
+};
+
+export type BestCommentWithFeedback = {
+  QuestionResponseId: string;
+  CommentValue?: string | null;
+  NumericValue?: number | null;
+  QuestionText?: string | null;
+  RespondentEmail?: string | null;
+  RespondentName?: string | null;
+  ApplicationName?: string | null;
+  DepartmentName?: string | null;
+  SubmittedAt?: string | null;
+  SurveyId?: string | null;
+  SurveyTitle?: string | null;
+  FeedbackText?: string | null;
+  FeedbackCreatedAt?: string | null;
+  ITLeadName?: string | null;
+  FunctionId?: string | null;
+  FunctionName?: string | null;
+};
+
+function extractError(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const data = payload as Record<string, unknown>;
+  if (typeof data.message === "string" && data.message.trim()) return data.message;
+  if (typeof data.error === "string" && data.error.trim()) return data.error;
+  return fallback;
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = getAccessToken();
+  if (!token) return {};
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(extra || {}),
+  };
+}
+
+async function getJson<T>(endpoint: string, fallbackMessage: string): Promise<ApiResult<T>> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}${endpoint}`, {
+      method: "GET",
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || !payload?.success) {
+      return { success: false, message: extractError(payload, fallbackMessage) };
+    }
+    return { success: true, data: payload as unknown as T };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+async function mutateJson(
+  endpoint: string,
+  method: "POST" | "DELETE",
+  body: Record<string, unknown>,
+  fallbackMessage: string
+): Promise<ApiResult<Record<string, unknown>>> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}${endpoint}`, {
+      method,
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!response.ok || !payload?.success) {
+      return { success: false, message: extractError(payload, fallbackMessage) };
+    }
+    return { success: true, data: payload || {} };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+function toQuery(params: Record<string, string | undefined>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value) return;
+    query.set(key, value);
+  });
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
+export async function fetchApprovalRespondents(input: {
+  surveyId: string;
+  duplicateFilter?: "all" | "duplicate" | "unique";
+  applicationId?: string;
+  departmentId?: string;
+}): Promise<ApiResult<ApprovalRespondent[]>> {
+  const query = toQuery({
+    surveyId: input.surveyId,
+    duplicateFilter: input.duplicateFilter || "all",
+    applicationId: input.applicationId,
+    departmentId: input.departmentId,
+  });
+  const result = await getJson<{ respondents?: ApprovalRespondent[] }>(
+    `/approvals/respondents${query}`,
+    "Gagal memuat responden"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.respondents || [] };
+}
+
+export async function fetchProposedTakeouts(input: {
+  surveyId?: string;
+  functionId?: string;
+  applicationId?: string;
+  departmentId?: string;
+  status?: string;
+}): Promise<ApiResult<ApprovalTakeout[]>> {
+  const query = toQuery({
+    surveyId: input.surveyId,
+    functionId: input.functionId,
+    applicationId: input.applicationId,
+    departmentId: input.departmentId,
+    status: input.status,
+  });
+  const result = await getJson<{ takeouts?: ApprovalTakeout[] }>(
+    `/approvals/proposed-takeouts${query}`,
+    "Gagal memuat proposed takeout"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.takeouts || [] };
+}
+
+export async function fetchPendingApprovals(input?: {
+  surveyId?: string;
+  functionId?: string;
+}): Promise<ApiResult<PendingApproval[]>> {
+  const query = toQuery({
+    surveyId: input?.surveyId,
+    functionId: input?.functionId,
+  });
+  const result = await getJson<{ approvals?: PendingApproval[] }>(
+    `/approvals/pending${query}`,
+    "Gagal memuat pending approvals"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.approvals || [] };
+}
+
+export async function fetchCommentsForSelection(input: {
+  surveyId?: string;
+  functionId?: string;
+  departmentId?: string;
+  applicationId?: string;
+}): Promise<ApiResult<ApprovalComment[]>> {
+  const query = toQuery({
+    surveyId: input.surveyId,
+    functionId: input.functionId,
+    departmentId: input.departmentId,
+    applicationId: input.applicationId,
+  });
+  const result = await getJson<{ comments?: ApprovalComment[] }>(
+    `/approvals/comments${query}`,
+    "Gagal memuat daftar komentar"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.comments || [] };
+}
+
+export async function fetchBestComments(input: {
+  surveyId?: string;
+  functionId?: string;
+}): Promise<ApiResult<ApprovalComment[]>> {
+  const query = toQuery({
+    surveyId: input.surveyId,
+    functionId: input.functionId,
+  });
+  const result = await getJson<{ comments?: ApprovalComment[] }>(
+    `/approvals/best-comments${query}`,
+    "Gagal memuat best comments"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.comments || [] };
+}
+
+export async function fetchBestCommentsWithFeedback(input: {
+  surveyId?: string;
+  functionId?: string;
+  departmentId?: string;
+}): Promise<ApiResult<BestCommentWithFeedback[]>> {
+  const query = toQuery({
+    surveyId: input.surveyId,
+    functionId: input.functionId,
+    departmentId: input.departmentId,
+  });
+  const result = await getJson<{ comments?: BestCommentWithFeedback[] }>(
+    `/approvals/best-comments-with-feedback${query}`,
+    "Gagal memuat best comments feedback"
+  );
+  if (!result.success) return result;
+  return { success: true, data: result.data.comments || [] };
+}
+
+export async function markBestComment(input: {
+  responseId: string;
+  questionId: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/best-comments", "POST", input, "Gagal menyimpan best comment");
+}
+
+export async function unmarkBestComment(input: {
+  responseId: string;
+  questionId: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/best-comments", "DELETE", input, "Gagal menghapus best comment");
+}
+
+export async function approveTakeout(input: {
+  responseId: string;
+  questionId: string;
+  reason?: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/approve", "POST", input, "Gagal approve takeout");
+}
+
+export async function rejectTakeout(input: {
+  responseId: string;
+  questionId: string;
+  reason: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/reject", "POST", input, "Gagal reject takeout");
+}
+
+export async function submitBestCommentFeedback(input: {
+  questionResponseId?: string;
+  responseId?: string;
+  questionId?: string;
+  feedbackText: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/best-comments/feedback", "POST", input, "Gagal mengirim feedback");
+}

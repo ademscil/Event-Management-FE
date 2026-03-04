@@ -16,6 +16,7 @@ function normalizeNextTarget(next?: string): string {
     "/admin/master-user",
     "/admin/report",
     "/admin/approval-admin",
+    "/admin/approval-it-lead",
     "/admin/best-comments",
     "/admin/master-bu",
     "/admin/master-divisi",
