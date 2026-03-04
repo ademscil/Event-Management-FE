@@ -405,6 +405,12 @@
   font-size: 12px;
 }
 
+.elementReorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .addElement select,
 .addPage {
   width: 100%;

@@ -14,6 +14,10 @@ interface ScheduleRequest {
   surveyId: string;
   scheduledDate: string;
   emailTemplate: string;
+  customMessage?: string;
+  customSubject?: string;
+  includeQrCode?: boolean;
+  recipientEmails?: string[];
   embedCover?: boolean;
   frequency?: ScheduleFrequency;
   scheduledTime?: string;
@@ -50,11 +54,20 @@ async function requestJson(
 
 function toSchedulePayload(input: ScheduleRequest) {
   const frequency: ScheduleFrequency = input.frequency || "once";
+  const recipientEmails = Array.isArray(input.recipientEmails)
+    ? input.recipientEmails.map((email) => email.trim()).filter(Boolean)
+    : [];
   const payload: Record<string, unknown> = {
     scheduledDate: input.scheduledDate,
     emailTemplate: input.emailTemplate,
     embedCover: input.embedCover ?? false,
     frequency,
+    targetCriteria: {
+      recipientEmails,
+      customMessage: (input.customMessage || "").trim(),
+      customSubject: (input.customSubject || "").trim(),
+      includeQrCode: input.includeQrCode === true,
+    },
   };
 
   if (frequency !== "once" && input.scheduledTime) {
@@ -389,13 +402,30 @@ export async function updateEventConfiguration(
   }
 
   try {
+    // Backend updateSurveyConfig expects camelCase keys.
+    const normalizedPayload: Record<string, unknown> = {};
+
+    if (input.HeroTitle !== undefined) normalizedPayload.heroTitle = input.HeroTitle;
+    if (input.HeroSubtitle !== undefined) normalizedPayload.heroSubtitle = input.HeroSubtitle;
+    if (input.HeroImageUrl !== undefined) normalizedPayload.heroImageUrl = input.HeroImageUrl;
+    if (input.LogoUrl !== undefined) normalizedPayload.logoUrl = input.LogoUrl;
+    if (input.BackgroundColor !== undefined) normalizedPayload.backgroundColor = input.BackgroundColor;
+    if (input.BackgroundImageUrl !== undefined) normalizedPayload.backgroundImageUrl = input.BackgroundImageUrl;
+    if (input.PrimaryColor !== undefined) normalizedPayload.primaryColor = input.PrimaryColor;
+    if (input.SecondaryColor !== undefined) normalizedPayload.secondaryColor = input.SecondaryColor;
+    if (input.FontFamily !== undefined) normalizedPayload.fontFamily = input.FontFamily;
+    if (input.ButtonStyle !== undefined) normalizedPayload.buttonStyle = input.ButtonStyle;
+    if (input.ShowProgressBar !== undefined) normalizedPayload.showProgressBar = input.ShowProgressBar;
+    if (input.ShowPageNumbers !== undefined) normalizedPayload.showPageNumbers = input.ShowPageNumbers;
+    if (input.MultiPage !== undefined) normalizedPayload.multiPage = input.MultiPage;
+
     const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}/config`, {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(input),
+      body: JSON.stringify(normalizedPayload),
     });
 
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -452,6 +482,38 @@ export async function fetchSurveyQuestions(
     return { success: true, questions: Array.isArray(body.questions) ? body.questions : [] };
   } catch {
     return { success: false, questions: [], message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function fetchSurveyResponseStatistics(
+  surveyId: string,
+): Promise<{ success: boolean; totalResponses: number; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, totalResponses: 0, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/responses/survey/${surveyId}/statistics`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | { success?: boolean; statistics?: { totalResponses?: unknown }; message?: string; error?: string }
+      | null;
+
+    if (!response.ok || !body?.success) {
+      return { success: false, totalResponses: 0, message: getErrorMessage(body, "Gagal memuat statistik response") };
+    }
+
+    const total = Number(body.statistics?.totalResponses ?? 0);
+    return { success: true, totalResponses: Number.isFinite(total) ? total : 0 };
+  } catch {
+    return { success: false, totalResponses: 0, message: "Gagal terhubung ke server" };
   }
 }
 
@@ -539,6 +601,42 @@ export async function deleteSurveyQuestion(
     }
 
     return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function uploadSurveyQuestionImage(
+  questionId: string,
+  image: Blob,
+  filename = "hero-cover.png",
+): Promise<{ success: boolean; imageUrl?: string; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("image", image, filename);
+
+    const response = await fetch(`${API_BASE_PATH}/questions/${questionId}/upload/image`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | { success?: boolean; imageUrl?: string; message?: string; error?: string }
+      | null;
+
+    if (!response.ok || body?.success !== true || !body.imageUrl) {
+      return { success: false, message: getErrorMessage(body, "Gagal upload gambar pertanyaan") };
+    }
+
+    return { success: true, imageUrl: body.imageUrl };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };
   }

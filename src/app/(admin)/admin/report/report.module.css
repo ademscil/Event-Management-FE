@@ -1,0 +1,258 @@
+.badgeGenerated {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.statusText {
+  text-transform: capitalize;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.buttonPrimaryXs,
+.buttonSecondaryXs,
+.buttonGhostXs {
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.buttonPrimaryXs {
+  border: 1px solid #2f55d4;
+  background: #2f55d4;
+  color: #ffffff;
+}
+
+.buttonSecondaryXs {
+  border: 1px solid #64748b;
+  background: #ffffff;
+  color: #334155;
+}
+
+.buttonGhostXs {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.buttonPrimaryXs:disabled,
+.buttonSecondaryXs:disabled,
+.buttonGhostXs:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.searchInlineRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  max-width: 760px;
+}
+
+.searchInlineLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #163761;
+  text-transform: uppercase;
+  min-width: 128px;
+}
+
+.searchInlineColon {
+  color: #163761;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.searchInlineInput {
+  flex: 1;
+  min-width: 280px;
+  max-width: 570px;
+}
+
+.statsGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 14px;
+}
+
+.statCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.statTitle {
+  margin: 0 0 8px 0;
+  color: #64748b;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.statValue {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tableNote {
+  margin: 0 0 10px 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.scoreCenter {
+  text-align: center !important;
+}
+
+.tagTakeout,
+.tagKeep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tagTakeout {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tagKeep {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.questionLink {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+}
+
+.mutedCell {
+  color: #9ca3af;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+
+.modalCard {
+  width: min(560px, 100%);
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.modalHeader {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.modalClose {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.modalBody {
+  padding: 18px;
+}
+
+.modalText {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.modalActions {
+  padding: 12px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.fieldControl {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .searchInlineRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .searchInlineColon {
+    display: none;
+  }
+
+  .searchInlineLabel {
+    font-size: 13px;
+  }
+
+  .searchInlineInput {
+    max-width: 100%;
+  }
+}
