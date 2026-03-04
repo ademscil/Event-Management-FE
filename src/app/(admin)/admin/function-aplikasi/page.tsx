@@ -327,7 +327,6 @@ export default function FunctionAplikasiPage() {
                   value={selectedFunctionId}
                   onChange={setSelectedFunctionId}
                   placeholder="Pilih Function"
-                  fullWidth
                 />
               </div>
               <div className={styles.formGroup}>
