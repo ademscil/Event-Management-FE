@@ -4,7 +4,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { fetchSurveyById, updateEventById, updateEventConfiguration, fetchSurveyQuestions, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion } from "@/lib/surveys";
+import { fetchSurveyById, updateEventById, updateEventConfiguration, fetchSurveyQuestions, fetchSurveyResponseStatistics, createSurveyQuestion, updateSurveyQuestion, deleteSurveyQuestion, uploadSurveyQuestionImage } from "@/lib/surveys";
 import { fetchOrgHierarchy, type BusinessUnitOption, type DivisionOption, type DepartmentOption } from "@/lib/org-hierarchy";
 import { fetchFunctionsMaster, type FunctionMaster } from "@/lib/master-data";
 import { fetchMappedApplicationsByDepartment, fetchMappedApplicationsByFunction } from "@/lib/mappings";
@@ -61,6 +61,7 @@ interface DraftPayload {
   scheduleStart: string;
   scheduleEnd: string;
   pages: BuilderPage[];
+  savedAt?: string;
   style: { logo: string; backgroundColor: string; backgroundImage: string; font: FontPreset };
 }
 
@@ -133,6 +134,62 @@ function toApiType(value: ElementType): string {
 function extractQuestionId(builderId: string): string | null {
   if (!builderId.startsWith("q-")) return null;
   return builderId.slice(2);
+}
+
+function normalizeUploadedMediaUrl(url?: string | null): string {
+  let raw = String(url || "").trim();
+  if (!raw) return "";
+
+  raw = raw.replace(/\\/g, "/");
+
+  if (raw.startsWith("data:")) {
+    return raw;
+  }
+
+  const uploadPathMatch = raw.match(/\/uploads\/(surveys|questions|options)\/[^?#]+/i);
+  if (uploadPathMatch?.[0]) {
+    const uploadPath = uploadPathMatch[0].replace(/\/{2,}/g, "/");
+    if (/^https?:\/\//i.test(raw)) {
+      const originMatch = raw.match(/^(https?:\/\/[^/]+)/i);
+      if (originMatch?.[1]) {
+        return `${originMatch[1]}${uploadPath}`;
+      }
+    }
+    return uploadPath;
+  }
+
+  if (/^https?:\/\/[^/]+\/(surveys|questions|options)\//i.test(raw)) {
+    return raw.replace(/^(https?:\/\/[^/]+)\/(surveys|questions|options)\//i, "$1/uploads/$2/");
+  }
+
+  if (/^\/(surveys|questions|options)\//i.test(raw)) {
+    return raw.replace(/^\/(surveys|questions|options)\//i, "/uploads/$1/");
+  }
+
+  if (/^(surveys|questions|options)\//i.test(raw)) {
+    return `/uploads/${raw}`;
+  }
+
+  if (/^uploads\/(surveys|questions|options)\//i.test(raw)) {
+    return `/${raw}`;
+  }
+
+  if (/^[^/\\]+\.(png|jpe?g|webp|gif|svg)$/i.test(raw)) {
+    return `/uploads/questions/${raw}`;
+  }
+
+  return raw;
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob | null> {
+  if (!dataUrl.startsWith("data:")) return null;
+  try {
+    const response = await fetch(dataUrl);
+    if (!response.ok) return null;
+    return await response.blob();
+  } catch {
+    return null;
+  }
 }
 function parseOptions(raw: unknown, elementType: ElementType): string[] {
   if (Array.isArray(raw)) return raw.map((v) => String(v));
@@ -237,7 +294,7 @@ function toPages(questions?: SurveyQuestion[]): BuilderPage[] {
       subtitle: q.Subtitle || "",
       required: Boolean(q.IsMandatory),
       options: parseOptions(q.Options, resolvedType),
-      coverUrl: "",
+      coverUrl: resolvedType === "hero" ? normalizeUploadedMediaUrl(q.ImageUrl) : "",
       dataSource: parseDataSource(q.Options),
       optionLayout: parseOptionLayout(q.Options, resolvedType),
       displayCondition: parseDisplayCondition(q.Options),
@@ -403,6 +460,7 @@ export default function SurveyCreatePage() {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [hasSubmittedResponses, setHasSubmittedResponses] = useState(false);
 
   const [surveyTitle, setSurveyTitle] = useState("");
   const [surveyDesc, setSurveyDesc] = useState("");
@@ -500,25 +558,37 @@ export default function SurveyCreatePage() {
       setBgColor(detail.configuration?.BackgroundColor || "#f5f5f5");
       setBgImage(detail.configuration?.BackgroundImageUrl || "");
       setLogo(detail.configuration?.LogoUrl || "");
+      const stats = await fetchSurveyResponseStatistics(surveyId);
+      setHasSubmittedResponses(stats.success && stats.totalResponses > 0);
 
       const local = localStorage.getItem(draftKey);
       if (local) {
         try {
           const draft = JSON.parse(local) as DraftPayload;
-          setSurveyTitle(draft.surveyTitle || detail.Title || "");
-          setSurveyDesc(draft.surveyDesc || detail.Description || "");
-          setTargetRespondents(draft.targetRespondents || "");
-          setTargetScore(draft.targetScore || "");
-          setScheduleStart(draft.scheduleStart || toDateInput(detail.StartDate));
-          setScheduleEnd(draft.scheduleEnd || toDateInput(detail.EndDate));
-          const draftPages = ensureUniqueElementIds(Array.isArray(draft.pages) ? draft.pages : []);
-          setPages(draftPages);
-          setElementCounter(getMaxTempElementCounter(draftPages));
-          setLogo(draft.style?.logo || "");
-          setBgColor(draft.style?.backgroundColor || "#f5f5f5");
-          setBgImage(draft.style?.backgroundImage || "");
-          setFont(draft.style?.font || "default");
-          return;
+          const serverUpdatedAt = new Date(detail.UpdatedAt || detail.CreatedAt || 0).getTime();
+          const localSavedAt = new Date(draft.savedAt || 0).getTime();
+          const shouldUseLocalBackup =
+            Number.isFinite(localSavedAt) &&
+            localSavedAt > 0 &&
+            (!Number.isFinite(serverUpdatedAt) || localSavedAt > serverUpdatedAt);
+
+          if (shouldUseLocalBackup) {
+            setSurveyTitle(draft.surveyTitle || detail.Title || "");
+            setSurveyDesc(draft.surveyDesc || detail.Description || "");
+            setTargetRespondents(draft.targetRespondents || "");
+            setTargetScore(draft.targetScore || "");
+            setScheduleStart(draft.scheduleStart || toDateInput(detail.StartDate));
+            setScheduleEnd(draft.scheduleEnd || toDateInput(detail.EndDate));
+            const draftPages = ensureUniqueElementIds(Array.isArray(draft.pages) ? draft.pages : []);
+            setPages(draftPages);
+            setElementCounter(getMaxTempElementCounter(draftPages));
+            setLogo(draft.style?.logo || "");
+            setBgColor(draft.style?.backgroundColor || "#f5f5f5");
+            setBgImage(draft.style?.backgroundImage || "");
+            setFont(draft.style?.font || "default");
+            setMessage("Memuat backup draft lokal yang lebih baru dari server.");
+            return;
+          }
         } catch {
           // ignore
         }
@@ -730,6 +800,21 @@ export default function SurveyCreatePage() {
     setPages((prev) => renumberPages(prev.filter((page) => page.id !== pageId)));
   };
 
+  const moveElementWithinPage = (pageId: number, elementIndex: number, direction: "up" | "down") => {
+    setPages((prev) =>
+      prev.map((page) => {
+        if (page.id !== pageId) return page;
+        const targetIndex = direction === "up" ? elementIndex - 1 : elementIndex + 1;
+        if (targetIndex < 0 || targetIndex >= page.elements.length) return page;
+
+        const nextElements = [...page.elements];
+        const [moved] = nextElements.splice(elementIndex, 1);
+        nextElements.splice(targetIndex, 0, moved);
+        return { ...page, elements: nextElements };
+      }),
+    );
+  };
+
   const validateEventSchedule = (): boolean => {
     if (scheduleStart && scheduleEnd && scheduleStart > scheduleEnd) {
       setError("Tanggal akhir harus sama atau setelah tanggal mulai");
@@ -741,9 +826,20 @@ export default function SurveyCreatePage() {
 
   const isQuestionImmutableError = (message: string): boolean => {
     const value = message.toLowerCase();
-    return value.includes("has responses") || value.includes("cannot modify question");
+    return (
+      value.includes("has responses") ||
+      value.includes("cannot modify question") ||
+      value.includes("cannot delete question") ||
+      value.includes("sudah ada data") ||
+      value.includes("tidak dapat mengubah") ||
+      value.includes("tidak dapat menghapus")
+    );
   };
   const syncQuestionsToServer = async (): Promise<boolean> => {
+    if (hasSubmittedResponses) {
+      setMessage("Survey sudah memiliki respons. Sistem akan tetap mencoba menyimpan perubahan pertanyaan.");
+    }
+
     if (!currentUserId) {
       setError("User login tidak valid untuk sinkronisasi draft");
       return false;
@@ -758,6 +854,7 @@ export default function SurveyCreatePage() {
     const remoteById = new Map(remote.questions.map((q) => [q.QuestionId, q]));
     const keptIds = new Set<string>();
     const idRemap = new Map<string, string>();
+    const uploadedCoverUrlByElementId = new Map<string, string>();
 
     const flat: Array<{ pageNumber: number; displayOrder: number; element: BuilderElement }> = [];
     let order = 1;
@@ -770,6 +867,10 @@ export default function SurveyCreatePage() {
 
     for (const item of flat) {
       const questionId = extractQuestionId(item.element.id);
+      const hasInlineHeroImage =
+        item.element.type === "hero" &&
+        typeof item.element.coverUrl === "string" &&
+        item.element.coverUrl.startsWith("data:");
       const ratingScale = Number(item.element.options?.[0] || 10);
       const resolvedRatingScale = Number.isFinite(ratingScale)
         ? Math.min(10, Math.max(3, Math.round(ratingScale)))
@@ -779,7 +880,12 @@ export default function SurveyCreatePage() {
         type: toApiType(item.element.type),
         promptText: item.element.title || "Untitled Question",
         subtitle: item.element.subtitle || null,
-        imageUrl: item.element.type === "hero" ? item.element.coverUrl || null : null,
+        imageUrl:
+          item.element.type === "hero"
+            ? hasInlineHeroImage
+              ? null
+              : item.element.coverUrl || null
+            : null,
         isMandatory: item.element.required,
         displayOrder: item.displayOrder,
         pageNumber: item.pageNumber,
@@ -790,17 +896,19 @@ export default function SurveyCreatePage() {
               ? { displayCondition: item.element.displayCondition }
               : {};
           const conditionalRequired =
-            item.element.conditionalRequiredSourceId
+            (item.element.conditionalRequiredSourceId
               ? {
                   conditionalRequired: {
-                    sourceElementId: item.element.conditionalRequiredSourceId,
+                    sourceElementId:
+                      idRemap.get(item.element.conditionalRequiredSourceId) ||
+                      item.element.conditionalRequiredSourceId,
                     threshold: Math.min(
                       10,
                       Math.max(1, Math.round(Number(item.element.conditionalRequiredThreshold || 7))),
                     ),
                   },
                 }
-              : {};
+              : {});
 
           if (["choice", "checkbox", "dropdown"].includes(item.element.type)) {
             return {
@@ -830,14 +938,28 @@ export default function SurveyCreatePage() {
         });
         if (!updated.success) {
           if (isQuestionImmutableError(updated.message || "")) {
-            setMessage("Survey sudah memiliki respons. Perubahan pertanyaan tidak dapat disimpan, hanya pengaturan event yang diperbarui.");
-            return true;
+            setError("Survey sudah memiliki respons. Perubahan pertanyaan (termasuk data source) tidak dapat disimpan.");
+            return false;
           }
 
           setError(updated.message || "Gagal memperbarui pertanyaan");
           return false;
         }
         keptIds.add(questionId);
+        if (hasInlineHeroImage) {
+          const imageBlob = await dataUrlToBlob(item.element.coverUrl);
+          if (!imageBlob) {
+            setError("Gagal memproses file hero cover");
+            return false;
+          }
+
+          const uploaded = await uploadSurveyQuestionImage(questionId, imageBlob, `hero-${questionId}.png`);
+          if (!uploaded.success || !uploaded.imageUrl) {
+            setError(uploaded.message || "Gagal upload hero cover");
+            return false;
+          }
+          uploadedCoverUrlByElementId.set(item.element.id, uploaded.imageUrl);
+        }
       } else {
         const created = await createSurveyQuestion({
           ...payload,
@@ -845,8 +967,8 @@ export default function SurveyCreatePage() {
         });
         if (!created.success || !created.question) {
           if (isQuestionImmutableError(created.message || "")) {
-            setMessage("Survey sudah memiliki respons. Perubahan pertanyaan tidak dapat disimpan, hanya pengaturan event yang diperbarui.");
-            return true;
+            setError("Survey sudah memiliki respons. Perubahan pertanyaan (termasuk data source) tidak dapat disimpan.");
+            return false;
           }
 
           setError(created.message || "Gagal menambah pertanyaan");
@@ -854,18 +976,35 @@ export default function SurveyCreatePage() {
         }
         keptIds.add(created.question.QuestionId);
         idRemap.set(item.element.id, `q-${created.question.QuestionId}`);
+        if (hasInlineHeroImage) {
+          const imageBlob = await dataUrlToBlob(item.element.coverUrl);
+          if (!imageBlob) {
+            setError("Gagal memproses file hero cover");
+            return false;
+          }
+
+          const uploaded = await uploadSurveyQuestionImage(
+            created.question.QuestionId,
+            imageBlob,
+            `hero-${created.question.QuestionId}.png`,
+          );
+          if (!uploaded.success || !uploaded.imageUrl) {
+            setError(uploaded.message || "Gagal upload hero cover");
+            return false;
+          }
+          uploadedCoverUrlByElementId.set(item.element.id, uploaded.imageUrl);
+        }
       }
     }
 
-    const deleteWarnings: string[] = [];
     for (const question of remote.questions) {
       if (keptIds.has(question.QuestionId)) continue;
       const removed = await deleteSurveyQuestion(question.QuestionId);
       if (!removed.success) {
         const message = (removed.message || "").toLowerCase();
         if (isQuestionImmutableError(message)) {
-          deleteWarnings.push("Beberapa pertanyaan tidak bisa dihapus karena survey sudah memiliki respons.");
-          continue;
+          setError("Survey sudah memiliki respons. Perubahan pertanyaan (termasuk data source) tidak dapat disimpan.");
+          return false;
         }
 
         setError(removed.message || "Gagal menghapus pertanyaan yang sudah dihapus dari builder");
@@ -873,17 +1012,14 @@ export default function SurveyCreatePage() {
       }
     }
 
-    if (deleteWarnings.length > 0) {
-      setMessage(deleteWarnings[0]);
-    }
-
-    if (idRemap.size > 0) {
+    if (idRemap.size > 0 || uploadedCoverUrlByElementId.size > 0) {
       setPages((prev) =>
         prev.map((page) => ({
           ...page,
           elements: page.elements.map((element) => ({
             ...element,
             id: idRemap.get(element.id) || element.id,
+            coverUrl: uploadedCoverUrlByElementId.get(element.id) || element.coverUrl,
             conditionalRequiredSourceId: element.conditionalRequiredSourceId
               ? idRemap.get(element.conditionalRequiredSourceId) || element.conditionalRequiredSourceId
               : undefined,
@@ -909,6 +1045,7 @@ export default function SurveyCreatePage() {
       scheduleStart,
       scheduleEnd,
       pages,
+      savedAt: new Date().toISOString(),
       style: { logo, backgroundColor: bgColor, backgroundImage: bgImage, font },
     };
 
@@ -957,6 +1094,17 @@ export default function SurveyCreatePage() {
     });
     if (!configUpdate.success) {
       setMessage("Draft tersimpan, tetapi style belum tersimpan ke server.");
+      return;
+    }
+
+    const verifyDraft = await fetchSurveyById(surveyId);
+    if (!verifyDraft.success || !verifyDraft.survey) {
+      setError("Draft tersimpan, tetapi verifikasi status gagal.");
+      return;
+    }
+    const latestStatus = verifyDraft.survey.Status || "";
+    if (latestStatus !== "Draft") {
+      setError(`Status belum berubah ke Draft (status saat ini: ${latestStatus || "-"})`);
       return;
     }
 
@@ -1020,6 +1168,17 @@ export default function SurveyCreatePage() {
     });
     if (!configUpdate.success) {
       setError(configUpdate.message || "Publish berhasil, namun style belum tersimpan.");
+      return;
+    }
+
+    const verifyActive = await fetchSurveyById(surveyId);
+    if (!verifyActive.success || !verifyActive.survey) {
+      setError("Publish berhasil, tetapi verifikasi status gagal.");
+      return;
+    }
+    const latestStatus = verifyActive.survey.Status || "";
+    if (latestStatus !== "Active") {
+      setError(`Status belum berubah ke Active (status saat ini: ${latestStatus || "-"})`);
       return;
     }
 
@@ -1713,7 +1872,41 @@ export default function SurveyCreatePage() {
                         </div>
                       ) : null}
 
-                      <div className={styles.elementActions}><label><input type="checkbox" checked={el.required} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,required:e.target.checked}:item)}:p))} /> Required</label><button className={styles.inlineButton} type="button" onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.filter((item)=>item.id!==el.id)}:p))}>Delete</button></div>
+                      <div className={styles.elementActions}>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={el.required}
+                            onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,required:e.target.checked}:item)}:p))}
+                          />{" "}
+                          Required
+                        </label>
+                        <div className={styles.elementReorder}>
+                          <button
+                            type="button"
+                            className={styles.inlineButton}
+                            disabled={elIndex === 0}
+                            onClick={() => moveElementWithinPage(page.id, elIndex, "up")}
+                          >
+                            Move Up
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.inlineButton}
+                            disabled={elIndex === page.elements.length - 1}
+                            onClick={() => moveElementWithinPage(page.id, elIndex, "down")}
+                          >
+                            Move Down
+                          </button>
+                        </div>
+                        <button
+                          className={styles.inlineButton}
+                          type="button"
+                          onClick={()=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.filter((item)=>item.id!==el.id)}:p))}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
 

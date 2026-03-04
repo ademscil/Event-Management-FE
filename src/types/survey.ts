@@ -45,6 +45,7 @@ export interface SurveyQuestion {
   Type: string;
   PromptText: string;
   Subtitle?: string | null;
+  ImageUrl?: string | null;
   IsMandatory?: boolean;
   DisplayOrder?: number;
   PageNumber?: number;

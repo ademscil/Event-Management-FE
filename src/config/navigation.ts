@@ -48,7 +48,14 @@ export const adminNavigation: NavigationItem[] = [
     href: "/admin/approval-admin",
     group: "APPROVAL",
     icon: "approvalAdmin",
-    roles: ["AdminEvent","ITLead"],
+    roles: ["AdminEvent"],
+  },
+  {
+    label: "Approval IT Lead",
+    href: "/admin/approval-it-lead",
+    group: "APPROVAL",
+    icon: "approvalAdmin",
+    roles: ["ITLead"],
   },
   {
     label: "Best Comments",

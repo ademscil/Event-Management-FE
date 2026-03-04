@@ -40,14 +40,14 @@ function matchesUserSearch(user: UserListItem, searchBy: string, keyword: string
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
 
-  if (searchBy === "npk") return (user.NPK || user.Username || "").toLowerCase().includes(term);
+  if (searchBy === "npk") return (user.NPK || "").toLowerCase().includes(term);
   if (searchBy === "username") return user.Username.toLowerCase().includes(term);
   if (searchBy === "name") return user.DisplayName.toLowerCase().includes(term);
   if (searchBy === "email") return user.Email.toLowerCase().includes(term);
   if (searchBy === "role") return roleLabel(user.Role).toLowerCase().includes(term);
 
   return (
-    (user.NPK || user.Username || "").toLowerCase().includes(term) ||
+    (user.NPK || "").toLowerCase().includes(term) ||
     user.Username.toLowerCase().includes(term) ||
     user.DisplayName.toLowerCase().includes(term) ||
     user.Email.toLowerCase().includes(term) ||
@@ -560,7 +560,7 @@ export default function MasterUserPage() {
                 ) : (
                   paginatedUsers.map((user) => (
                     <tr key={user.UserId}>
-                      <td>{user.NPK || user.Username || "-"}</td>
+                      <td>{user.NPK || "-"}</td>
                       <td>{user.DisplayName}</td>
                       <td>{user.Email}</td>
                       <td>{roleLabel(user.Role)}</td>

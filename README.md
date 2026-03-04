@@ -21,10 +21,22 @@ cp .env.local.example .env.local
 npm install
 ```
 
+Jika PowerShell memblokir `npm.ps1` (error `is not digitally signed`), jalankan via CMD-compatible binary:
+
+```cmd
+npm.cmd install
+```
+
 3. Jalankan frontend di port `3001`:
 
 ```bash
 npm run dev:3001
+```
+
+Fallback saat policy PowerShell memblokir:
+
+```cmd
+npm.cmd run dev:3001
 ```
 
 4. Buka:

@@ -14,6 +14,7 @@ type DropdownProps = {
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  fullWidth?: boolean;
 };
 
 export function Dropdown({
@@ -23,10 +24,10 @@ export function Dropdown({
   onChange,
   disabled = false,
   placeholder = "Select...",
+  fullWidth = false,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
   const displayText = selectedOption?.label || placeholder;
@@ -53,14 +54,21 @@ export function Dropdown({
   };
 
   return (
-    <div ref={dropdownRef} style={{ position: "relative", display: "inline-block" }}>
+    <div
+      ref={dropdownRef}
+      style={{
+        position: "relative",
+        display: fullWidth ? "block" : "inline-block",
+        width: fullWidth ? "100%" : "auto",
+      }}
+    >
       <button
-        ref={buttonRef}
         type="button"
         className={className}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        onClick={() => !disabled && setIsOpen((prev) => !prev)}
         disabled={disabled}
         style={{
+          width: "100%",
           cursor: disabled ? "not-allowed" : "pointer",
           userSelect: "none",
           display: "flex",
@@ -70,9 +78,10 @@ export function Dropdown({
         }}
       >
         <span>{displayText}</span>
-        <span style={{ fontSize: "10px", marginLeft: "8px" }}>{isOpen ? "▲" : "▼"}</span>
+        <span style={{ fontSize: "10px", marginLeft: "8px" }}>{isOpen ? "^" : "v"}</span>
       </button>
-      {isOpen && !disabled && (
+
+      {isOpen && !disabled ? (
         <div
           style={{
             position: "absolute",
@@ -103,22 +112,13 @@ export function Dropdown({
                 fontSize: "14px",
                 fontWeight: value === option.value ? 600 : 400,
               }}
-              onMouseEnter={(e) => {
-                if (value !== option.value) {
-                  e.currentTarget.style.background = "#f9fafb";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (value !== option.value) {
-                  e.currentTarget.style.background = "#ffffff";
-                }
-              }}
             >
               {option.label}
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
+

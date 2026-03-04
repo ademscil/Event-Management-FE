@@ -6,13 +6,13 @@ const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 const EVENTS_ENDPOINT = `${API_BASE_PATH}/events`;
 
 interface ScheduledOperation {
-  ScheduleId: number;
-  Type: string;
-  ScheduledDate: string;
-  Status: string;
-  Frequency: string;
-  ScheduledTime?: string;
-  DayOfWeek?: number;
+  operationId: string;
+  operationType: string;
+  frequency: string;
+  scheduledDate?: string | null;
+  scheduledTime?: string | null;
+  dayOfWeek?: number | null;
+  status: string;
 }
 
 export async function generateQRCode(surveyId: string): Promise<{ success: boolean; qrCodeUrl?: string; message?: string }> {
@@ -20,9 +20,13 @@ export async function generateQRCode(surveyId: string): Promise<{ success: boole
   if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
 
   try {
-    const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}/qr-code`, {
+    const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}/qrcode`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     });
 
     const payload = await response.json().catch(() => null);
@@ -30,7 +34,12 @@ export async function generateQRCode(surveyId: string): Promise<{ success: boole
       return { success: false, message: payload?.message || "Gagal generate QR code" };
     }
 
-    return { success: true, qrCodeUrl: payload.qrCodeUrl };
+    const qrCodeUrl = payload.qrCodeDataUrl || payload.qrCodeUrl;
+    if (!qrCodeUrl) {
+      return { success: false, message: "QR code tidak tersedia dari server" };
+    }
+
+    return { success: true, qrCodeUrl };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };
   }
@@ -52,18 +61,28 @@ export async function getScheduledOperations(surveyId: string): Promise<{ succes
       return { success: false, message: payload?.message || "Gagal memuat scheduled operations" };
     }
 
-    return { success: true, operations: payload.operations || [] };
+    const rawOperations = Array.isArray(payload?.operations) ? payload.operations : [];
+    const normalized = rawOperations.map((item: Record<string, unknown>) => ({
+      operationId: String(item.operationId || item.OperationId || ""),
+      operationType: String(item.operationType || item.OperationType || ""),
+      frequency: String(item.frequency || item.Frequency || ""),
+      scheduledDate: (item.scheduledDate || item.ScheduledDate || null) as string | null,
+      scheduledTime: (item.scheduledTime || item.ScheduledTime || null) as string | null,
+      dayOfWeek: (item.dayOfWeek || item.DayOfWeek || null) as number | null,
+      status: String(item.status || item.Status || ""),
+    }));
+    return { success: true, operations: normalized };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };
   }
 }
 
-export async function cancelScheduledOperation(surveyId: string, scheduleId: number): Promise<{ success: boolean; message?: string }> {
+export async function cancelScheduledOperation(_surveyId: string, operationId: string): Promise<{ success: boolean; message?: string }> {
   const token = getAccessToken();
   if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
 
   try {
-    const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}/scheduled-operations/${scheduleId}`, {
+    const response = await fetch(`${API_BASE_PATH}/surveys/scheduled-operations/${operationId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

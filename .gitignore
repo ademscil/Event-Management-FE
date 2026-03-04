@@ -54,6 +54,7 @@ logs/
 
 # local progress helper artifacts
 docs/progress-board.json
+docs/codex-prompt-updated.md
 scripts/check-progress.cmd
 scripts/check-progress.ps1
 scripts/check-progress.py
