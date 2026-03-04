@@ -59,7 +59,33 @@ export default function FunctionAplikasiPage() {
   };
 
   useEffect(() => {
-    void load();
+    let active = true;
+
+    (async () => {
+      const [mappingRes, functionRes, appRes] = await Promise.all([
+        fetchFunctionApplicationMappingsDetailed(),
+        fetchFunctionsMaster(),
+        fetchApplicationsMaster(),
+      ]);
+
+      if (!active) return;
+
+      if (!mappingRes.success) {
+        setError(mappingRes.message || "Gagal memuat mapping function-aplikasi");
+        setRows([]);
+      } else {
+        setRows(mappingRes.mappings);
+        setError("");
+      }
+
+      setFunctions(functionRes.success ? functionRes.data.filter((item) => item.IsActive) : []);
+      setApplications(appRes.success ? appRes.data.filter((item) => item.IsActive) : []);
+      setLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredRows = useMemo(() => {

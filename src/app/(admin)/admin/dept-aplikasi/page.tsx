@@ -117,7 +117,37 @@ export default function DeptAplikasiPage() {
   };
 
   useEffect(() => {
-    void load();
+    let active = true;
+
+    (async () => {
+      const [mappingRes, buRes, divRes, deptRes, appRes] = await Promise.all([
+        fetchDepartmentApplicationMappingsHierarchical(),
+        fetchBusinessUnitsMaster(),
+        fetchDivisionsMaster(),
+        fetchDepartmentsMaster(),
+        fetchApplicationsMaster(),
+      ]);
+
+      if (!active) return;
+
+      if (!mappingRes.success) {
+        setError(mappingRes.message || "Gagal memuat mapping dept-aplikasi");
+        setRows([]);
+      } else {
+        setRows(flattenRows(mappingRes.mappings));
+        setError("");
+      }
+
+      setBusinessUnits(buRes.success ? buRes.data.filter((item) => item.IsActive) : []);
+      setDivisions(divRes.success ? divRes.data.filter((item) => item.IsActive) : []);
+      setDepartments(deptRes.success ? deptRes.data.filter((item) => item.IsActive) : []);
+      setApplications(appRes.success ? appRes.data.filter((item) => item.IsActive) : []);
+      setLoading(false);
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredRows = useMemo(() => {
