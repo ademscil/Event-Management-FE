@@ -425,7 +425,6 @@ export default function DeptAplikasiPage() {
                     setSelectedDepartment("");
                   }}
                   placeholder="Pilih Business Unit"
-                  fullWidth
                 />
               </div>
               <div className={styles.formGroup}>
@@ -439,7 +438,6 @@ export default function DeptAplikasiPage() {
                     setSelectedDepartment("");
                   }}
                   placeholder="Pilih Division"
-                  fullWidth
                 />
               </div>
               <div className={styles.formGroup}>
@@ -450,7 +448,6 @@ export default function DeptAplikasiPage() {
                   value={selectedDepartment}
                   onChange={setSelectedDepartment}
                   placeholder="Pilih Department"
-                  fullWidth
                 />
               </div>
               <div className={styles.formGroup}>
