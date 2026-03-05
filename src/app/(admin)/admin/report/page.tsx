@@ -35,7 +35,7 @@ type ModalState =
   | { type: "none" }
   | { type: "confirm-generate"; survey: ReportSelectionItem }
   | { type: "comment-detail"; row: TakeoutTableRow }
-  | { type: "export"; survey: ReportSelectionItem; format: "excel" | "csv" | "pdf" };
+  | { type: "export"; survey: ReportSelectionItem; format: "excel" | "pdf" };
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
@@ -67,15 +67,23 @@ function mapSelectionStatus(item: ReportSelectionItem): "generated" | "active" |
   return "other";
 }
 
+function normalizeRole(input: string | null | undefined): string {
+  return String(input || "").toLowerCase().replace(/[\s_-]/g, "");
+}
+
 export default function ReportSelectionPage() {
   const searchParams = useSearchParams();
   const preselectedSurveyId = String(searchParams.get("surveyId") || "");
 
   const currentUser = getCurrentUser();
   const role: UserRole | null = currentUser?.role ?? null;
-  const isAdminEvent = role === "AdminEvent";
-  const isDepartmentHead = role === "DepartmentHead";
-  const canAccess = isAdminEvent || isDepartmentHead;
+  const normalizedRole = normalizeRole(String(role || ""));
+  const isSuperAdmin = normalizedRole === "superadmin";
+  const isAdminEvent = normalizedRole === "adminevent";
+  const isItLead = normalizedRole === "itlead";
+  const isDepartmentHead = normalizedRole === "departmenthead";
+  const canAccess = isSuperAdmin || isAdminEvent || isItLead || isDepartmentHead;
+  const canGenerateAndExport = isSuperAdmin || isAdminEvent;
 
   const [surveys, setSurveys] = useState<ReportSelectionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,7 +163,6 @@ export default function ReportSelectionPage() {
   const exportFormatOptions = useMemo(
     () => [
       { value: "excel", label: "Excel (.xlsx)" },
-      { value: "csv", label: "CSV (.csv)" },
       { value: "pdf", label: "PDF (.pdf)" },
     ],
     []
@@ -259,12 +266,7 @@ export default function ReportSelectionPage() {
     setMessage(`Report untuk "${survey.title}" berhasil di-generate.`);
   };
 
-  const runExportReport = async (survey: ReportSelectionItem, format: "excel" | "csv" | "pdf") => {
-    if (format === "csv") {
-      setError("Export CSV belum tersedia. Gunakan Excel atau PDF.");
-      return;
-    }
-
+  const runExportReport = async (survey: ReportSelectionItem, format: "excel" | "pdf") => {
     setExporting(true);
     setError("");
     const result = await exportSurveyReport({
@@ -305,7 +307,7 @@ export default function ReportSelectionPage() {
       <div className={baseStyles.pageHead}>
         <div>
           <h1 className={baseStyles.title}>Report</h1>
-          <div className={baseStyles.subtitle}>{isDepartmentHead ? "Pilih survey untuk melihat laporan (readonly)." : "Pilih event untuk melihat laporan."}</div>
+          <div className={baseStyles.subtitle}>{!canGenerateAndExport ? "Pilih survey untuk melihat laporan (readonly)." : "Pilih event untuk melihat laporan."}</div>
         </div>
       </div>
 
@@ -371,7 +373,7 @@ export default function ReportSelectionPage() {
                       <td>{formatNumber(item.respondentCount)}</td>
                       <td>
                         <div className={styles.actions}>
-                          {isDepartmentHead ? (
+                          {!canGenerateAndExport ? (
                             <button
                               type="button"
                               className={styles.buttonSecondaryXs}
@@ -577,7 +579,7 @@ export default function ReportSelectionPage() {
                     fullWidth
                     options={exportFormatOptions}
                     value={modal.format}
-                    onChange={(value) => setModal({ ...modal, format: value as "excel" | "csv" | "pdf" })}
+                    onChange={(value) => setModal({ ...modal, format: value as "excel" | "pdf" })}
                   />
                 </div>
                 <footer className={styles.modalActions}>
