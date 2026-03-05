@@ -70,6 +70,12 @@
   border-color: #1479b8;
 }
 
+.btnSecondary {
+  background: #e5e7eb;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
 .btnDanger {
   background: #dc2626;
   color: #ffffff;
@@ -124,6 +130,73 @@
   display: flex;
   gap: 10px;
   align-items: flex-end;
+}
+
+.uploadRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filePickerWrap {
+  flex: 1;
+  min-width: 280px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+}
+
+.fileInputHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.fileTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #9ca3af;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fileText {
+  color: #111827;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uploadNote {
+  margin-top: 12px;
+  border: 1px solid #f4d47c;
+  border-radius: 10px;
+  background: #fff7d6;
+  color: #9a4f00;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .tableWrap {

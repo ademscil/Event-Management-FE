@@ -31,6 +31,8 @@ export default function MasterBUPage() {
   const [rows, setRows] = useState<BusinessUnitMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [uploadFileName, setUploadFileName] = useState("No file chosen");
+  const [uploadInfo, setUploadInfo] = useState("");
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [searchBy, setSearchBy] = useState("all");
@@ -174,6 +176,24 @@ export default function MasterBUPage() {
     setAppliedKeyword(keyword);
   };
 
+  const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.target.files?.[0];
+    setUploadFileName(file?.name || "No file chosen");
+    setUploadInfo("");
+  };
+
+  const onDownloadTemplate = () => {
+    setUploadInfo("Template upload Master BU belum tersedia.");
+  };
+
+  const onUploadMaster = () => {
+    if (uploadFileName === "No file chosen") {
+      setUploadInfo("Pilih file terlebih dahulu.");
+      return;
+    }
+    setUploadInfo("Upload bulk Master BU belum tersedia.");
+  };
+
   return (
     <>
       <div className={styles.pageHead}>
@@ -290,6 +310,41 @@ export default function MasterBUPage() {
             />
           </>
         ) : null}
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeader}>
+          <h2 className={styles.panelTitle}>Upload Data Master</h2>
+          <span className={styles.meta}>Unggah data master BU dari file Excel.</span>
+        </div>
+        <div className={styles.formGroup}>
+          <label className={styles.label}>Pilih file</label>
+          <div className={styles.uploadRow}>
+            <div className={styles.filePickerWrap}>
+              <input
+                id="master-bu-file"
+                className={styles.fileInputHidden}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={onPickUploadFile}
+              />
+              <label className={styles.fileTrigger} htmlFor="master-bu-file">
+                Choose File
+              </label>
+              <span className={styles.fileText}>{uploadFileName}</span>
+            </div>
+            <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
+              Download Template
+            </button>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster}>
+              Upload
+            </button>
+          </div>
+        </div>
+        <div className={styles.uploadNote}>
+          Format file: Excel (.xlsx/.xls). Kolom minimal: BU Code, BU Name, Status.
+        </div>
+        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
