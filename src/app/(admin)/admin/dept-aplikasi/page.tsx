@@ -75,7 +75,8 @@ export default function DeptAplikasiPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [uploadFileName, setUploadFileName] = useState("");
+  const [uploadFileName, setUploadFileName] = useState("No file chosen");
+  const [uploadInfo, setUploadInfo] = useState("");
 
   const [filterBu, setFilterBu] = useState("");
   const [filterDivision, setFilterDivision] = useState("");
@@ -263,6 +264,24 @@ export default function DeptAplikasiPage() {
     URL.revokeObjectURL(url);
   };
 
+  const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+    const file = event.target.files?.[0];
+    setUploadFileName(file?.name || "No file chosen");
+    setUploadInfo("");
+  };
+
+  const onDownloadTemplate = () => {
+    setUploadInfo("Template upload Mapping Department - Aplikasi belum tersedia.");
+  };
+
+  const onUploadMapping = () => {
+    if (uploadFileName === "No file chosen") {
+      setUploadInfo("Pilih file terlebih dahulu.");
+      return;
+    }
+    setUploadInfo("Upload bulk Mapping Department - Aplikasi belum tersedia.");
+  };
+
   return (
     <>
       <div className={styles.pageHead}>
@@ -279,32 +298,6 @@ export default function DeptAplikasiPage() {
           </button>
         </div>
       </div>
-
-      <section className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <h2 className={styles.panelTitle}>Upload Data Mapping</h2>
-          <span className={styles.meta}>Upload file CSV/Excel untuk import data mapping.</span>
-        </div>
-        <div className={styles.formInline}>
-          <div className={styles.formGroup} style={{ flex: 1 }}>
-            <label className={styles.label}>Pilih file</label>
-            <input
-              className={`${styles.input} ${styles.fileInput}`}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={(event) => setUploadFileName(event.target.files?.[0]?.name || "")}
-            />
-          </div>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} type="button">
-            Upload
-          </button>
-        </div>
-        <div className={styles.alert}>
-          <strong>Format Upload:</strong> File CSV/Excel dengan kolom: Business Unit, Division, Department, Application
-          (satu app per row atau pisahkan dengan koma).
-          {uploadFileName ? ` Dipilih: ${uploadFileName}` : ""}
-        </div>
-      </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
@@ -401,6 +394,41 @@ export default function DeptAplikasiPage() {
             </table>
           </div>
         ) : null}
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHeader}>
+          <h2 className={styles.panelTitle}>Upload Data Mapping</h2>
+          <span className={styles.meta}>Upload file CSV/Excel untuk import data mapping.</span>
+        </div>
+        <div className={styles.formGroup}>
+          <label className={styles.label}>Pilih file</label>
+          <div className={styles.uploadRow}>
+            <div className={styles.filePickerWrap}>
+              <input
+                id="dept-aplikasi-file"
+                className={styles.fileInputHidden}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={onPickUploadFile}
+              />
+              <label className={styles.fileTrigger} htmlFor="dept-aplikasi-file">
+                Choose File
+              </label>
+              <span className={styles.fileText}>{uploadFileName}</span>
+            </div>
+            <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
+              Download Template
+            </button>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMapping}>
+              Upload
+            </button>
+          </div>
+        </div>
+        <div className={styles.uploadNote}>
+          Format upload: CSV/Excel dengan kolom Business Unit, Division, Department, Application.
+        </div>
+        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
