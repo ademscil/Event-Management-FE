@@ -78,6 +78,56 @@ export default function OperationsPage() {
   const [openInfoPanel, setOpenInfoPanel] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ScheduledOperation | null>(null);
 
+  const parseRecipients = (value: string): string[] => (
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+  );
+
+  const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const validateScheduleInput = (input: {
+    date: string;
+    time: string;
+    frequency: ScheduleFrequency;
+    subject: string;
+    messageText: string;
+    recipients: string[];
+    dayOfWeek?: DayOfWeekValue;
+  }): string | null => {
+    if (!input.date || !input.time || !input.subject.trim() || !input.messageText.trim()) {
+      return "Tanggal, waktu, subject, dan message wajib diisi";
+    }
+
+    if (input.frequency === "weekly" && (input.dayOfWeek === undefined || input.dayOfWeek === null)) {
+      return "Hari wajib diisi untuk recurring mingguan";
+    }
+
+    const invalidRecipients = input.recipients.filter((email) => !isValidEmail(email));
+    if (invalidRecipients.length > 0) {
+      return `Format email tidak valid: ${invalidRecipients[0]}`;
+    }
+
+    const now = new Date();
+    const scheduleDate = new Date(`${input.date}T${input.time}:00`);
+    if (Number.isNaN(scheduleDate.getTime())) {
+      return "Format tanggal/waktu tidak valid";
+    }
+
+    if (input.frequency === "once" && scheduleDate <= now) {
+      return "Jadwal once harus lebih besar dari waktu saat ini";
+    }
+
+    const startDateOnly = new Date(`${input.date}T00:00:00`);
+    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (input.frequency !== "once" && startDateOnly < todayDateOnly) {
+      return "Start date recurring tidak boleh di masa lalu";
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     const load = async () => {
       const result = await fetchSurveyById(surveyId);
@@ -170,21 +220,24 @@ export default function OperationsPage() {
   };
 
   const handleScheduleBlast = async () => {
-    if (!blastDate || !blastTime || !blastSubject.trim() || !blastMessage.trim()) {
-      setError("Tanggal, waktu, subject, dan message wajib diisi");
-      return;
-    }
-    if (blastFrequency === "weekly" && blastDayOfWeek === undefined) {
-      setError("Hari wajib diisi untuk recurring mingguan");
+    const recipientEmails = parseRecipients(blastRecipients);
+    const validationError = validateScheduleInput({
+      date: blastDate,
+      time: blastTime,
+      frequency: blastFrequency,
+      subject: blastSubject,
+      messageText: blastMessage,
+      recipients: recipientEmails,
+      dayOfWeek: blastFrequency === "weekly" ? blastDayOfWeek : undefined,
+    });
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setBlastLoading(true);
     setError("");
     setMessage("");
-    const recipientEmails = blastRecipients
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+
     const localScheduleDateTime = blastFrequency === "once" ? `${blastDate}T${blastTime}:00` : `${blastDate}T00:00:00`;
     const result = await scheduleEventBlast({
       surveyId,
@@ -217,21 +270,24 @@ export default function OperationsPage() {
   };
 
   const handleScheduleReminder = async () => {
-    if (!reminderDate || !reminderTime || !reminderSubject.trim() || !reminderMessage.trim()) {
-      setError("Tanggal, waktu, subject, dan message wajib diisi");
-      return;
-    }
-    if (reminderFrequency === "weekly" && reminderDayOfWeek === undefined) {
-      setError("Hari wajib diisi untuk recurring mingguan");
+    const recipientEmails = parseRecipients(reminderRecipients);
+    const validationError = validateScheduleInput({
+      date: reminderDate,
+      time: reminderTime,
+      frequency: reminderFrequency,
+      subject: reminderSubject,
+      messageText: reminderMessage,
+      recipients: recipientEmails,
+      dayOfWeek: reminderFrequency === "weekly" ? reminderDayOfWeek : undefined,
+    });
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setReminderLoading(true);
     setError("");
     setMessage("");
-    const recipientEmails = reminderRecipients
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+
     const localScheduleDateTime = reminderFrequency === "once" ? `${reminderDate}T${reminderTime}:00` : `${reminderDate}T00:00:00`;
     const result = await scheduleEventReminder({
       surveyId,
@@ -273,6 +329,7 @@ export default function OperationsPage() {
     const normalized = String(status || "").toLowerCase();
     if (normalized === "pending") return styles.badgePending;
     if (normalized === "completed") return styles.badgeCompleted;
+    if (normalized === "failed") return styles.badgeFailed;
     return styles.badgeCancelled;
   };
 
@@ -289,8 +346,10 @@ export default function OperationsPage() {
 
   return (
     <div className={styles.wrapper}>
-      {error ? <div className={`${styles.alert} ${styles.alertError}`}>{error}</div> : null}
-      {message ? <div className={`${styles.alert} ${styles.alertSuccess}`}>{message}</div> : null}
+      <div aria-live="polite">
+        {error ? <div className={`${styles.alert} ${styles.alertError}`}>{error}</div> : null}
+        {message ? <div className={`${styles.alert} ${styles.alertSuccess}`}>{message}</div> : null}
+      </div>
 
       <div className={styles.header}>
         <div>
@@ -418,6 +477,7 @@ export default function OperationsPage() {
               />
             </label>
           ) : null}
+          {blastFrequency === "monthly" ? <div className={styles.infoText}>Monthly akan dijalankan pada tanggal start date setiap bulan, di waktu yang dipilih.</div> : null}
           <div className={styles.formGrid}>
             <label>
               {blastFrequency === "once" ? "Tanggal" : "Start Date"}
@@ -489,6 +549,7 @@ export default function OperationsPage() {
               />
             </label>
           ) : null}
+          {reminderFrequency === "monthly" ? <div className={styles.infoText}>Monthly akan dijalankan pada tanggal start date setiap bulan, di waktu yang dipilih.</div> : null}
           <div className={styles.formGrid}>
             <label>
               {reminderFrequency === "once" ? "Tanggal" : "Start Date"}
@@ -524,44 +585,46 @@ export default function OperationsPage() {
         ) : operations.length === 0 ? (
           <div className={styles.empty}>Belum ada scheduled operations</div>
         ) : (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Scheduled Date</th>
-                <th>Frequency</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {operations.map((op, index) => (
-                <tr key={op.operationId || `${op.operationType}-${op.scheduledDate}-${index}`}>
-                  <td>{op.operationType || "-"}</td>
-                  <td>{formatDate(op.scheduledDate, op.scheduledTime)}</td>
-                  <td>{op.frequency || "-"}</td>
-                  <td>
-                    <span className={`${styles.badge} ${getStatusBadge(op.status)}`}>
-                      {op.status || "-"}
-                    </span>
-                  </td>
-                  <td>
-                    {String(op.status || "").toLowerCase() === "pending" ? (
-                      <button
-                        className={styles.actionBtn}
-                        onClick={() => setCancelTarget(op)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Scheduled Date</th>
+                  <th>Frequency</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {operations.map((op, index) => (
+                  <tr key={op.operationId || `${op.operationType}-${op.scheduledDate}-${index}`}>
+                    <td>{op.operationType || "-"}</td>
+                    <td>{formatDate(op.scheduledDate, op.scheduledTime)}</td>
+                    <td>{op.frequency || "-"}</td>
+                    <td>
+                      <span className={`${styles.badge} ${getStatusBadge(op.status)}`}>
+                        {op.status || "-"}
+                      </span>
+                    </td>
+                    <td>
+                      {String(op.status || "").toLowerCase() === "pending" ? (
+                        <button
+                          className={styles.actionBtn}
+                          onClick={() => setCancelTarget(op)}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

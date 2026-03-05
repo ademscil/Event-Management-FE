@@ -17,7 +17,8 @@ export interface NavigationItem {
     | "masterAplikasi"
     | "mappingDeptAplikasi"
     | "mappingFunctionAplikasi"
-    | "masterUser";
+    | "masterUser"
+    | "auditTrail";
   roles: UserRole[];
 }
 
@@ -42,6 +43,13 @@ export const adminNavigation: NavigationItem[] = [
     group: "EVENT",
     icon: "report",
     roles: ["AdminEvent", "DepartmentHead"],
+  },
+  {
+    label: "Audit Trail",
+    href: "/admin/audit-trail",
+    group: "EVENT",
+    icon: "auditTrail",
+    roles: ["SuperAdmin"],
   },
   {
     label: "Approval Admin",

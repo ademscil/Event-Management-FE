@@ -1,0 +1,223 @@
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.btnSecondary {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  border: 1px solid #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnInline {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.metaText {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badgeCreate,
+.badgeApprove,
+.badgeLogin,
+.badgeAccess,
+.badgeExport {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badgeUpdate,
+.badgeReject,
+.badgeLogout {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badgeDelete,
+.badgeLoginFailed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badgeDefault {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.mutedCell {
+  color: #9ca3af;
+}
+
+.pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.paginationInfo {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.paginationActions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  padding: 18px;
+}
+
+.modalCard {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 36px);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modalHeader {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.modalClose {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.modalBody {
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.modalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.detailItem {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.detailLabel {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detailValue {
+  margin: 0;
+  font-size: 13px;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.jsonBlock {
+  margin-top: 10px;
+}
+
+.jsonTitle {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.jsonPre {
+  margin: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  overflow: auto;
+  max-height: 280px;
+}
