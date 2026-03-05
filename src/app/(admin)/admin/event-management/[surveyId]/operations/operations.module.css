@@ -223,7 +223,13 @@
 
 .table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  width: 100%;
 }
 
 .table th,
@@ -264,6 +270,11 @@
 .badgeCancelled {
   background: #f8d7da;
   color: #721c24;
+}
+
+.badgeFailed {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .actionBtn {

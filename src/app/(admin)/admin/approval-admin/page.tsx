@@ -48,47 +48,62 @@ export default function ApprovalAdminPage() {
 
   useEffect(() => {
     const run = async () => {
-      const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
-      if (!surveyRes.success) {
+      try {
+        const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
+        if (!surveyRes.success) {
+          setLoading(false);
+          setError(surveyRes.message || "Gagal memuat survey");
+          return;
+        }
+
+        const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
+        setSurveys(surveyOptions);
+        setSurveyId(surveyOptions[0]?.id || "");
+
+        if (functionRes.success) {
+          setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
+        }
+      } catch {
+        setError("Gagal memuat data awal halaman approval.");
+      } finally {
         setLoading(false);
-        setError(surveyRes.message || "Gagal memuat survey");
-        return;
       }
-
-      const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
-      setSurveys(surveyOptions);
-      setSurveyId(surveyOptions[0]?.id || "");
-
-      if (functionRes.success) {
-        setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
-      }
-      setLoading(false);
     };
     void run();
   }, []);
 
   useEffect(() => {
-    if (!surveyId) return;
+    if (!surveyId) {
+      setRespondents([]);
+      setTakeouts([]);
+      return;
+    }
     const run = async () => {
       setError("");
       setMessage("");
-      const [respondentRes, takeoutRes] = await Promise.all([
-        fetchApprovalRespondents({ surveyId, duplicateFilter }),
-        fetchProposedTakeouts({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
-      ]);
+      try {
+        const [respondentRes, takeoutRes] = await Promise.all([
+          fetchApprovalRespondents({ surveyId, duplicateFilter }),
+          fetchProposedTakeouts({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
+        ]);
 
-      if (!respondentRes.success) {
-        setError(respondentRes.message);
+        if (!respondentRes.success) {
+          setError(respondentRes.message);
+          setRespondents([]);
+        } else {
+          setRespondents(respondentRes.data);
+        }
+
+        if (!takeoutRes.success) {
+          setError((prev) => prev || takeoutRes.message);
+          setTakeouts([]);
+        } else {
+          setTakeouts(takeoutRes.data);
+        }
+      } catch {
+        setError("Terjadi kesalahan saat memuat data approval.");
         setRespondents([]);
-      } else {
-        setRespondents(respondentRes.data);
-      }
-
-      if (!takeoutRes.success) {
-        setError((prev) => prev || takeoutRes.message);
         setTakeouts([]);
-      } else {
-        setTakeouts(takeoutRes.data);
       }
     };
     void run();
@@ -114,7 +129,7 @@ export default function ApprovalAdminPage() {
 
   if (!canAccess) {
     return (
-      <section className={baseStyles.panel}>
+      <section className={baseStyles.panel} aria-busy={loading}>
         <h1 className={baseStyles.title}>Akses Ditolak</h1>
         <p className={baseStyles.subtitle}>Halaman Approval Admin hanya untuk Admin Event.</p>
       </section>
@@ -168,9 +183,11 @@ export default function ApprovalAdminPage() {
           </button>
         </div>
 
-        {loading ? <p className={styles.meta}>Memuat data...</p> : null}
-        {error ? <p className={styles.error}>{error}</p> : null}
-        {message ? <p className={styles.success}>{message}</p> : null}
+        <div className={styles.statusRegion} aria-live="polite">
+          {loading ? <p className={styles.meta}>Memuat data...</p> : null}
+          {error ? <p className={styles.error}>{error}</p> : null}
+          {message ? <p className={styles.success}>{message}</p> : null}
+        </div>
 
         {tab === "respondents" ? (
           <>
@@ -185,7 +202,7 @@ export default function ApprovalAdminPage() {
                   value={duplicateFilter}
                   onChange={(value) => setDuplicateFilter(value as "all" | "duplicate" | "unique")}
                 />
-                <button type="button" className={styles.btnGhost} onClick={() => setSelectedRespondentIds([])}>
+                <button type="button" className={styles.btnGhost} onClick={() => setSelectedRespondentIds([])} disabled={selectedRespondentIds.length === 0}>
                   Clear Selection
                 </button>
               </div>
@@ -195,15 +212,16 @@ export default function ApprovalAdminPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>Responden</th>
-                    <th>Department</th>
-                    <th>Aplikasi</th>
-                    <th>Email</th>
-                    <th>Submit Time</th>
-                    <th>Duplicate</th>
-                    <th>Action</th>
-                    <th>
+                    <th scope="col">Responden</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Aplikasi</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Submit Time</th>
+                    <th scope="col">Duplicate</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">
                       <input
+                        aria-label="Pilih semua responden"
                         type="checkbox"
                         checked={selectedRespondentIds.length > 0 && selectedRespondentIds.length === respondents.length}
                         onChange={(event) =>
@@ -240,12 +258,16 @@ export default function ApprovalAdminPage() {
                           </td>
                           <td className={styles.center}>
                             <input
+                              aria-label={`Pilih responden ${row.RespondentName || row.RespondentEmail || row.ResponseId}`}
                               type="checkbox"
                               checked={selected}
                               onChange={(event) =>
-                                setSelectedRespondentIds((prev) =>
-                                  event.target.checked ? [...prev, row.ResponseId] : prev.filter((id) => id !== row.ResponseId)
-                                )
+                                setSelectedRespondentIds((prev) => {
+                                  if (event.target.checked) {
+                                    return Array.from(new Set([...prev, row.ResponseId]));
+                                  }
+                                  return prev.filter((id) => id !== row.ResponseId);
+                                })
                               }
                             />
                           </td>
@@ -272,14 +294,14 @@ export default function ApprovalAdminPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>Responden</th>
-                    <th>Department</th>
-                    <th>Aplikasi</th>
-                    <th>Pertanyaan</th>
-                    <th>Score</th>
-                    <th>Komentar</th>
-                    <th>Alasan Takeout</th>
-                    <th>Status</th>
+                    <th scope="col">Responden</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Aplikasi</th>
+                    <th scope="col">Pertanyaan</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Komentar</th>
+                    <th scope="col">Alasan Takeout</th>
+                    <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -310,11 +332,11 @@ export default function ApprovalAdminPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail responden" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Detail Responden</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })}>
-                x
+              <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail responden">
+                ×
               </button>
             </header>
             <div className={styles.modalBody}>

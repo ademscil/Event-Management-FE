@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
-import type { DragEvent } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import styles from "./survey-create.module.css";
 import SurveyPreviewElement from "@/components/survey/survey-preview-element";
 
@@ -42,6 +42,7 @@ interface BuilderElement {
   coverUrl: string;
   dataSource?: DataSourceType;
   optionLayout?: "vertical" | "horizontal";
+  allowMultipleAnswers?: boolean;
   displayCondition?: "always" | "after_mapped_selection";
   conditionalRequiredSourceId?: string;
   conditionalRequiredThreshold?: number;
@@ -51,6 +52,33 @@ interface BuilderPage {
   id: number;
   title: string;
   elements: BuilderElement[];
+}
+
+interface TemplateElementInput {
+  type: ElementType;
+  title: string;
+  subtitle?: string;
+  required?: boolean;
+  options?: string[];
+  dataSource?: DataSourceType;
+  optionLayout?: "vertical" | "horizontal";
+  allowMultipleAnswers?: boolean;
+  displayCondition?: "always" | "after_mapped_selection";
+  conditionalRequiredSourceIndex?: number;
+  conditionalRequiredThreshold?: number;
+}
+
+interface TemplatePageInput {
+  title: string;
+  elements: TemplateElementInput[];
+}
+
+interface BuilderTemplate {
+  id: string;
+  name: string;
+  category: "feedback" | "employee" | "service" | "compliance" | "event";
+  description: string;
+  pages: TemplatePageInput[];
 }
 
 interface DraftPayload {
@@ -63,6 +91,13 @@ interface DraftPayload {
   pages: BuilderPage[];
   savedAt?: string;
   style: { logo: string; backgroundColor: string; backgroundImage: string; font: FontPreset };
+}
+
+function sanitizeSurveyDescription(value: string): string {
+  return value
+    .replace(/\s*\[Admin Event Target:[^\]]*\]\s*/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 const FONT_MAP: Record<FontPreset, string> = {
@@ -86,6 +121,271 @@ const ELEMENTS: Array<{ type: ElementType; label: string; icon: string }> = [
   { type: "date", label: "Date", icon: "\u{1F4C5}" },
   { type: "signature", label: "Signature", icon: "\u270D\uFE0F" },
 ];
+
+const BUILDER_TEMPLATES: BuilderTemplate[] = [
+  {
+    id: "employee-satisfaction",
+    name: "Employee Satisfaction",
+    category: "employee",
+    description: "Template umum kepuasan karyawan dengan metrik rating dan komentar prioritas perbaikan.",
+    pages: [
+      {
+        title: "Welcome",
+        elements: [
+          { type: "hero", title: "Employee Satisfaction Survey", subtitle: "Feedback Anda membantu peningkatan layanan internal." },
+          { type: "dropdown", title: "Business Unit", required: true, dataSource: "bu", options: ["Corporate"] },
+          { type: "dropdown", title: "Department", required: true, dataSource: "department", options: ["IT"] },
+        ],
+      },
+      {
+        title: "Experience",
+        elements: [
+          { type: "choice", title: "Area yang Anda nilai", required: true, dataSource: "app_department", options: ["App A"] },
+          { type: "rating", title: "Skor kepuasan keseluruhan", required: true, options: ["10"], displayCondition: "after_mapped_selection" },
+          { type: "text", title: "Alasan skor Anda", required: false, displayCondition: "after_mapped_selection", conditionalRequiredSourceIndex: 1, conditionalRequiredThreshold: 7 },
+        ],
+      },
+      {
+        title: "Improvement Plan",
+        elements: [
+          { type: "checkbox", title: "Prioritas peningkatan", options: ["Stability", "Performance", "UI/UX", "Support"] },
+          { type: "text", title: "Saran tambahan", required: false },
+          { type: "signature", title: "Konfirmasi responden", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "post-event-feedback",
+    name: "Post-Event Feedback",
+    category: "event",
+    description: "Template evaluasi event setelah kegiatan selesai, termasuk sesi, materi, dan fasilitator.",
+    pages: [
+      {
+        title: "Opening",
+        elements: [
+          { type: "hero", title: "Post-Event Feedback Survey", subtitle: "Mohon evaluasi event yang baru Anda ikuti." },
+          { type: "text", title: "Nama Event", required: true },
+          { type: "date", title: "Tanggal Event", required: true },
+        ],
+      },
+      {
+        title: "Evaluation",
+        elements: [
+          { type: "likert", title: "Penilaian sesi", required: true, options: ["Materi relevan", "Pembicara jelas", "Durasi efektif"] },
+          { type: "rating", title: "Skor event keseluruhan", required: true, options: ["10"] },
+          { type: "text", title: "Saran perbaikan", required: false, conditionalRequiredSourceIndex: 1, conditionalRequiredThreshold: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    id: "it-service-quality",
+    name: "IT Service Quality",
+    category: "service",
+    description: "Template evaluasi kualitas layanan IT helpdesk dan aplikasi pendukung kerja.",
+    pages: [
+      {
+        title: "Profile",
+        elements: [
+          { type: "dropdown", title: "Function", required: true, dataSource: "function", options: ["IT"] },
+          { type: "choice", title: "Aplikasi yang dinilai", required: true, dataSource: "app_function", options: ["App X"] },
+        ],
+      },
+      {
+        title: "Service Score",
+        elements: [
+          { type: "matrix", title: "Penilaian detail layanan", required: true, options: ["Kecepatan", "Ketepatan Solusi", "Komunikasi"] },
+          { type: "rating", title: "Skor layanan IT", required: true, options: ["10"], displayCondition: "after_mapped_selection" },
+          { type: "text", title: "Masukan prioritas", displayCondition: "after_mapped_selection", conditionalRequiredSourceIndex: 1, conditionalRequiredThreshold: 7 },
+        ],
+      },
+      {
+        title: "Follow-up",
+        elements: [
+          { type: "choice", title: "Apakah perlu tindak lanjut tim IT?", required: true, options: ["Ya", "Tidak"] },
+          { type: "date", title: "Target tindak lanjut", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "application-adoption",
+    name: "Application Adoption",
+    category: "service",
+    description: "Template untuk mengukur adopsi dan kemudahan penggunaan aplikasi.",
+    pages: [
+      {
+        title: "Selection",
+        elements: [
+          { type: "dropdown", title: "Business Unit", required: true, dataSource: "bu", options: ["Corporate"] },
+          { type: "dropdown", title: "Division", required: true, dataSource: "division", options: ["IT"] },
+          { type: "choice", title: "Aplikasi utama", required: true, dataSource: "app_department", options: ["App 1"] },
+        ],
+      },
+      {
+        title: "Adoption",
+        elements: [
+          { type: "checkbox", title: "Fitur yang sering digunakan", options: ["Dashboard", "Report", "Approval"], optionLayout: "vertical", displayCondition: "after_mapped_selection" },
+          { type: "rating", title: "Kemudahan penggunaan", required: true, options: ["10"], displayCondition: "after_mapped_selection" },
+          { type: "text", title: "Kendala penggunaan", displayCondition: "after_mapped_selection" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "compliance-self-assessment",
+    name: "Compliance Self Assessment",
+    category: "compliance",
+    description: "Template audit kepatuhan internal dengan matrix, bukti tanggal, dan approval signature.",
+    pages: [
+      {
+        title: "Assessment",
+        elements: [
+          { type: "dropdown", title: "Department", required: true, dataSource: "department", options: ["Dept"] },
+          { type: "matrix", title: "Checklist kepatuhan", required: true, options: ["Policy", "Process", "Evidence"] },
+          { type: "date", title: "Tanggal pemeriksaan", required: true },
+        ],
+      },
+      {
+        title: "Risk Score",
+        elements: [
+          { type: "rating", title: "Skor kepatuhan", required: true, options: ["10"] },
+          { type: "text", title: "Alasan skor", required: false, conditionalRequiredSourceIndex: 0, conditionalRequiredThreshold: 8 },
+        ],
+      },
+      {
+        title: "Evidence",
+        elements: [
+          { type: "text", title: "Ringkasan bukti", required: true },
+          { type: "date", title: "Tanggal verifikasi evidence", required: true },
+        ],
+      },
+      {
+        title: "Acknowledgement",
+        elements: [
+          { type: "text", title: "Catatan temuan", required: false },
+          { type: "signature", title: "Tanda tangan PIC", required: true },
+        ],
+      },
+    ],
+  },
+  {
+    id: "request-intake",
+    name: "Request Intake",
+    category: "feedback",
+    description: "Template intake kebutuhan/permintaan user sebelum proyek atau enhancement dimulai.",
+    pages: [
+      {
+        title: "Request Intake",
+        elements: [
+          { type: "text", title: "Nama Pemohon", required: true },
+          { type: "dropdown", title: "Business Unit", required: true, dataSource: "bu", options: ["Corporate"] },
+          { type: "dropdown", title: "Department", required: true, dataSource: "department", options: ["IT"] },
+          { type: "text", title: "Ringkasan kebutuhan", required: true },
+          { type: "checkbox", title: "Tipe kebutuhan", required: true, options: ["Bug Fix", "Enhancement", "New Feature"] },
+          { type: "date", title: "Target implementasi", required: false },
+          { type: "rating", title: "Urgensi request", required: true, options: ["10"] },
+        ],
+      },
+    ],
+  },
+  {
+    id: "research-survey",
+    name: "Research Survey",
+    category: "feedback",
+    description: "Template riset preferensi user dengan kombinasi question kuantitatif dan kualitatif.",
+    pages: [
+      {
+        title: "Research Profile",
+        elements: [
+          { type: "dropdown", title: "Function", required: true, dataSource: "function", options: ["IT"] },
+          { type: "choice", title: "Aplikasi fokus riset", required: true, dataSource: "app_function", options: ["App Focus"] },
+        ],
+      },
+      {
+        title: "Research Answers",
+        elements: [
+          { type: "rating", title: "Skor pengalaman", required: true, options: ["10"], displayCondition: "after_mapped_selection" },
+          { type: "text", title: "Insight utama", required: true, displayCondition: "after_mapped_selection" },
+          { type: "checkbox", title: "Faktor prioritas", options: ["Performance", "UI/UX", "Stability"], displayCondition: "after_mapped_selection" },
+        ],
+      },
+      {
+        title: "Conclusion",
+        elements: [
+          { type: "likert", title: "Tingkat urgensi perbaikan", options: ["1 bulan", "3 bulan", "6 bulan"] },
+          { type: "text", title: "Kesimpulan responden", required: false },
+        ],
+      },
+    ],
+  },
+  {
+    id: "full-evaluation",
+    name: "Full Evaluation Pack",
+    category: "employee",
+    description: "Template lengkap untuk evaluasi menyeluruh (semua jenis elemen utama tersedia).",
+    pages: [
+      {
+        title: "Welcome",
+        elements: [
+          { type: "hero", title: "Full Evaluation Survey", subtitle: "Template lengkap untuk kebutuhan evaluasi umum." },
+          { type: "dropdown", title: "Business Unit", dataSource: "bu", required: true, options: ["Corporate"] },
+          { type: "dropdown", title: "Department", dataSource: "department", required: true, options: ["IT"] },
+        ],
+      },
+      {
+        title: "Questions",
+        elements: [
+          { type: "choice", title: "Aplikasi yang dievaluasi", required: true, dataSource: "app_department", options: ["App 1"] },
+          { type: "checkbox", title: "Aspek yang diprioritaskan", options: ["Reliability", "Support", "Feature"], displayCondition: "after_mapped_selection" },
+          { type: "likert", title: "Evaluasi per dimensi", options: ["Usability", "Performance", "Support"], displayCondition: "after_mapped_selection" },
+          { type: "rating", title: "Skor overall", required: true, options: ["10"], displayCondition: "after_mapped_selection" },
+          { type: "text", title: "Komentar detail", displayCondition: "after_mapped_selection", conditionalRequiredSourceIndex: 3, conditionalRequiredThreshold: 8 },
+        ],
+      },
+      {
+        title: "Operational Notes",
+        elements: [
+          { type: "matrix", title: "Penilaian operasional", options: ["Availability", "Accuracy", "Response"] },
+          { type: "date", title: "Tanggal evaluasi", required: true },
+          { type: "text", title: "Catatan operasional", required: false },
+        ],
+      },
+      {
+        title: "Closing",
+        elements: [
+          { type: "choice", title: "Rekomendasi akhir", required: true, options: ["Lanjut", "Perlu perbaikan", "Tidak disarankan"] },
+          { type: "signature", title: "Tanda tangan responden", required: false },
+        ],
+      },
+    ],
+  },
+];
+
+function hashStringToHue(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 360;
+}
+
+function getTemplatePreviewStyle(template: BuilderTemplate): CSSProperties {
+  const hue = hashStringToHue(`${template.id}-${template.category}`);
+  const hue2 = (hue + 35) % 360;
+  const hue3 = (hue + 110) % 360;
+  return {
+    background: `
+      radial-gradient(circle at 18% 22%, hsl(${hue} 76% 66% / 0.95) 0 24%, transparent 25%),
+      radial-gradient(circle at 78% 30%, hsl(${hue2} 72% 62% / 0.9) 0 28%, transparent 29%),
+      radial-gradient(circle at 55% 82%, hsl(${hue3} 68% 57% / 0.86) 0 32%, transparent 33%),
+      linear-gradient(135deg, hsl(${hue} 34% 35%) 0%, hsl(${hue2} 28% 28%) 100%)
+    `,
+    borderColor: `hsl(${hue} 32% 48% / 0.55)`,
+  };
+}
 
 function toDateInput(value?: string | null): string {
   if (!value) return "";
@@ -245,6 +545,12 @@ function parseOptionLayout(raw: unknown, elementType: ElementType): "vertical" |
   return value === "horizontal" ? "horizontal" : "vertical";
 }
 
+function parseAllowMultipleAnswers(raw: unknown, elementType: ElementType): boolean {
+  if (elementType !== "choice") return false;
+  if (!raw || typeof raw !== "object") return false;
+  return Boolean((raw as { allowMultipleAnswers?: unknown }).allowMultipleAnswers);
+}
+
 function parseDisplayCondition(raw: unknown): "always" | "after_mapped_selection" {
   if (!raw || typeof raw !== "object") return "always";
   const value = String((raw as { displayCondition?: unknown }).displayCondition || "always");
@@ -297,6 +603,7 @@ function toPages(questions?: SurveyQuestion[]): BuilderPage[] {
       coverUrl: resolvedType === "hero" ? normalizeUploadedMediaUrl(q.ImageUrl) : "",
       dataSource: parseDataSource(q.Options),
       optionLayout: parseOptionLayout(q.Options, resolvedType),
+      allowMultipleAnswers: parseAllowMultipleAnswers(q.Options, resolvedType),
       displayCondition: parseDisplayCondition(q.Options),
       conditionalRequiredSourceId: parseConditionalRequiredSourceId(q.Options),
       conditionalRequiredThreshold: parseConditionalRequiredThreshold(q.Options),
@@ -391,6 +698,7 @@ function newElement(type: ElementType, tempId: string): BuilderElement {
     coverUrl: "",
     dataSource: "manual",
     optionLayout: type === "choice" || type === "checkbox" ? "vertical" : undefined,
+    allowMultipleAnswers: type === "choice" ? false : undefined,
     displayCondition: "always",
     conditionalRequiredSourceId: undefined,
     conditionalRequiredThreshold: undefined,
@@ -482,6 +790,11 @@ export default function SurveyCreatePage() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [showStyle, setShowStyle] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showTemplateConfirm, setShowTemplateConfirm] = useState(false);
+  const [templateCategory, setTemplateCategory] = useState<"all" | BuilderTemplate["category"]>("all");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({});
 
@@ -550,7 +863,7 @@ export default function SurveyCreatePage() {
 
       const detail = result.survey;
       setSurveyTitle(detail.Title || "");
-      setSurveyDesc(detail.Description || "");
+      setSurveyDesc(sanitizeSurveyDescription(detail.Description || ""));
       setTargetRespondents(detail.TargetRespondents != null ? String(detail.TargetRespondents) : "");
       setTargetScore(detail.TargetScore != null ? String(detail.TargetScore) : "");
       setScheduleStart(toDateInput(detail.StartDate));
@@ -574,7 +887,7 @@ export default function SurveyCreatePage() {
 
           if (shouldUseLocalBackup) {
             setSurveyTitle(draft.surveyTitle || detail.Title || "");
-            setSurveyDesc(draft.surveyDesc || detail.Description || "");
+            setSurveyDesc(sanitizeSurveyDescription(draft.surveyDesc || detail.Description || ""));
             setTargetRespondents(draft.targetRespondents || "");
             setTargetScore(draft.targetScore || "");
             setScheduleStart(draft.scheduleStart || toDateInput(detail.StartDate));
@@ -856,11 +1169,11 @@ export default function SurveyCreatePage() {
     const idRemap = new Map<string, string>();
     const uploadedCoverUrlByElementId = new Map<string, string>();
 
-    const flat: Array<{ pageNumber: number; displayOrder: number; element: BuilderElement }> = [];
+    const flat: Array<{ pageNumber: number; pageTitle: string; displayOrder: number; element: BuilderElement }> = [];
     let order = 1;
     pages.forEach((page, pageIndex) => {
       page.elements.forEach((element) => {
-        flat.push({ pageNumber: pageIndex + 1, displayOrder: order, element });
+        flat.push({ pageNumber: pageIndex + 1, pageTitle: page.title, displayOrder: order, element });
         order += 1;
       });
     });
@@ -891,6 +1204,9 @@ export default function SurveyCreatePage() {
         pageNumber: item.pageNumber,
         layoutOrientation: "vertical" as const,
         options: (() => {
+          const pageMeta = item.pageTitle?.trim()
+            ? { pageTitle: item.pageTitle.trim() }
+            : {};
           const displayCondition =
             item.element.displayCondition && item.element.displayCondition !== "always"
               ? { displayCondition: item.element.displayCondition }
@@ -917,17 +1233,21 @@ export default function SurveyCreatePage() {
               ...(item.element.type === "choice" || item.element.type === "checkbox"
                 ? { layout: item.element.optionLayout || "vertical" }
                 : {}),
+              ...(item.element.type === "choice"
+                ? { allowMultipleAnswers: Boolean(item.element.allowMultipleAnswers) }
+                : {}),
+              ...pageMeta,
               ...displayCondition,
               ...conditionalRequired,
             };
           }
-          if (item.element.type === "likert") return { variant: "likert", rows: item.element.options, ...displayCondition, ...conditionalRequired };
-          if (item.element.type === "matrix") return { variant: "matrix", columns: item.element.options, ...displayCondition, ...conditionalRequired };
-          if (item.element.type === "rating") return { ratingScale: resolvedRatingScale, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "likert") return { variant: "likert", rows: item.element.options, ...pageMeta, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "matrix") return { variant: "matrix", columns: item.element.options, ...pageMeta, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "rating") return { ratingScale: resolvedRatingScale, ...pageMeta, ...displayCondition, ...conditionalRequired };
           if (Object.keys(displayCondition).length > 0 || Object.keys(conditionalRequired).length > 0) {
-            return { ...displayCondition, ...conditionalRequired };
+            return { ...pageMeta, ...displayCondition, ...conditionalRequired };
           }
-          return null;
+          return Object.keys(pageMeta).length > 0 ? pageMeta : null;
         })(),
       };
 
@@ -1039,7 +1359,7 @@ export default function SurveyCreatePage() {
 
     const payload: DraftPayload = {
       surveyTitle,
-      surveyDesc,
+      surveyDesc: sanitizeSurveyDescription(surveyDesc),
       targetRespondents,
       targetScore,
       scheduleStart,
@@ -1063,7 +1383,7 @@ export default function SurveyCreatePage() {
 
     const updatePayload: Parameters<typeof updateEventById>[1] = {
       title: surveyTitle || "Untitled Survey",
-      description: surveyDesc,
+      description: sanitizeSurveyDescription(surveyDesc),
       status: "Draft",
       targetRespondents: Number.isFinite(parsedTargetRespondents)
         ? parsedTargetRespondents
@@ -1138,7 +1458,7 @@ export default function SurveyCreatePage() {
 
     const updatePayload: Parameters<typeof updateEventById>[1] = {
       title: surveyTitle || "Untitled Survey",
-      description: surveyDesc,
+      description: sanitizeSurveyDescription(surveyDesc),
       status: "Active",
       targetRespondents: Number.isFinite(parsedTargetRespondents)
         ? parsedTargetRespondents
@@ -1249,7 +1569,28 @@ export default function SurveyCreatePage() {
       10,
       Math.max(1, Math.round(Number(element.conditionalRequiredThreshold || 7))),
     );
-    const sourceValue = Number(values[element.conditionalRequiredSourceId] || 0);
+    const sourceId = element.conditionalRequiredSourceId;
+    const directValue = Number(values[sourceId] || 0);
+
+    let sourceValue = Number.isFinite(directValue) && directValue > 0 ? directValue : 0;
+    if (sourceValue <= 0) {
+      const rowValues = Object.entries(values)
+        .filter(([key]) => key.startsWith(`${sourceId}-`))
+        .map(([, value]) => {
+          const text = String(value ?? "").trim();
+          const parsed = Number(text);
+          if (Number.isFinite(parsed)) {
+            return parsed;
+          }
+          return null;
+        })
+        .filter((value): value is number => value !== null && value > 0);
+
+      if (rowValues.length > 0) {
+        sourceValue = rowValues.reduce((sum, current) => sum + current, 0) / rowValues.length;
+      }
+    }
+
     if (!Number.isFinite(sourceValue) || sourceValue <= 0) return false;
     return sourceValue < threshold;
   };
@@ -1270,6 +1611,112 @@ export default function SurveyCreatePage() {
     if (mappedSelectorIndex === -1 || elementIndex <= mappedSelectorIndex) return false;
     const current = elements[elementIndex];
     return ["rating", "likert", "matrix", "text", "date", "signature", "choice", "checkbox", "dropdown"].includes(current.type);
+  };
+
+  const hasBuilderContent = useMemo(
+    () => pages.some((page) => page.elements.length > 0),
+    [pages],
+  );
+
+  const filteredTemplates = useMemo(() => {
+    const term = templateSearch.trim().toLowerCase();
+    return BUILDER_TEMPLATES.filter((item) => {
+      if (templateCategory !== "all" && item.category !== templateCategory) return false;
+      if (!term) return true;
+      return `${item.name} ${item.description}`.toLowerCase().includes(term);
+    });
+  }, [templateCategory, templateSearch]);
+
+  const elementIconMap = useMemo(
+    () =>
+      ELEMENTS.reduce<Record<ElementType, string>>((acc, item) => {
+        acc[item.type] = item.icon;
+        return acc;
+      }, {} as Record<ElementType, string>),
+    [],
+  );
+
+  const selectedTemplate = useMemo(
+    () => BUILDER_TEMPLATES.find((item) => item.id === selectedTemplateId) || null,
+    [selectedTemplateId],
+  );
+
+  const applyTemplate = (template: BuilderTemplate) => {
+    let nextCounter = elementCounter;
+    const indexedElements: BuilderElement[] = [];
+
+    const nextPages: BuilderPage[] = template.pages.map((page, pageIndex) => {
+      const nextElements: BuilderElement[] = page.elements.map((element) => {
+        nextCounter += 1;
+        const newId = buildTempElementId(nextCounter);
+        const nextElement: BuilderElement = {
+          id: newId,
+          type: element.type,
+          title: element.title,
+          subtitle: element.subtitle || "",
+          required: Boolean(element.required),
+          options: Array.isArray(element.options) && element.options.length > 0
+            ? [...element.options]
+            : parseOptions(undefined, element.type),
+          coverUrl: "",
+          dataSource: element.dataSource || "manual",
+          optionLayout: element.optionLayout || (element.type === "choice" || element.type === "checkbox" ? "vertical" : undefined),
+          allowMultipleAnswers: element.type === "choice" ? Boolean(element.allowMultipleAnswers) : undefined,
+          displayCondition: element.displayCondition || "always",
+          conditionalRequiredSourceId: undefined,
+          conditionalRequiredThreshold: element.conditionalRequiredThreshold,
+        };
+        indexedElements.push(nextElement);
+        return nextElement;
+      });
+
+      return {
+        id: pageIndex + 1,
+        title: page.title,
+        elements: nextElements,
+      };
+    });
+
+    template.pages.forEach((page, pageIndex) => {
+      page.elements.forEach((element, elementIndex) => {
+        if (!element.conditionalRequiredSourceIndex && element.conditionalRequiredSourceIndex !== 0) return;
+        const sourceIdx = element.conditionalRequiredSourceIndex;
+        const currentOffset = template.pages
+          .slice(0, pageIndex)
+          .reduce((sum, item) => sum + item.elements.length, 0);
+        const currentAbsolute = currentOffset + elementIndex;
+        const sourceAbsolute = currentOffset + sourceIdx;
+        if (sourceAbsolute < 0 || sourceAbsolute >= indexedElements.length) return;
+        if (currentAbsolute < 0 || currentAbsolute >= indexedElements.length) return;
+        indexedElements[currentAbsolute].conditionalRequiredSourceId = indexedElements[sourceAbsolute].id;
+        if (!indexedElements[currentAbsolute].conditionalRequiredThreshold) {
+          indexedElements[currentAbsolute].conditionalRequiredThreshold = 7;
+        }
+      });
+    });
+
+    const normalized = ensureUniqueElementIds(renumberPages(nextPages));
+    setPages(normalized);
+    setElementCounter(nextCounter);
+    setShowTemplatePicker(false);
+    setShowTemplateConfirm(false);
+    setSelectedTemplateId("");
+    setTemplateSearch("");
+    setTemplateCategory("all");
+    setMessage(`Template "${template.name}" berhasil diterapkan. Klik Save Draft untuk menyimpan ke server.`);
+  };
+
+  const onSelectTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+  };
+
+  const onApplySelectedTemplate = () => {
+    if (!selectedTemplate) return;
+    if (hasBuilderContent) {
+      setShowTemplateConfirm(true);
+      return;
+    }
+    applyTemplate(selectedTemplate);
   };
 
   if (loading) return <section className={styles.loading}>Memuat survey builder...</section>;
@@ -1363,7 +1810,9 @@ export default function SurveyCreatePage() {
                             const effectiveElement = { ...el, required: effectiveRequired };
                             return (
                               <>
-                                {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title || "Question"}{effectiveElement.required ? " *" : ""}</div> : null}
+                                {effectiveElement.type !== "hero" && effectiveElement.title.trim()
+                                  ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
+                                  : null}
                                 {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
                                 <SurveyPreviewElement
                                   element={effectiveElement}
@@ -1437,7 +1886,9 @@ export default function SurveyCreatePage() {
                             const effectiveElement = { ...el, required: effectiveRequired };
                             return (
                               <>
-                                {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title || "Question"}{effectiveElement.required ? " *" : ""}</div> : null}
+                                {effectiveElement.type !== "hero" && effectiveElement.title.trim()
+                                  ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
+                                  : null}
                                 {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
                                 <SurveyPreviewElement
                                   element={effectiveElement}
@@ -1489,7 +1940,7 @@ export default function SurveyCreatePage() {
 
             <div className={styles.sidebarSection}>
               <div className={styles.sidebarTitle}>Templates</div>
-              <button className={styles.sideAction} type="button" onClick={() => setMessage("Load Template: WIP")}>Load Template</button>
+              <button className={styles.sideAction} type="button" onClick={() => setShowTemplatePicker(true)}>Load Template</button>
             </div>
 
             <div className={styles.sidebarSection}>
@@ -1527,7 +1978,7 @@ export default function SurveyCreatePage() {
 
               <div className={styles.surveyCard}>
                 <input className={styles.surveyTitle} placeholder="Survey Title" value={surveyTitle} onChange={(e)=>setSurveyTitle(e.target.value)} />
-                <input className={styles.surveyDesc} placeholder="Survey description" value={surveyDesc} onChange={(e)=>setSurveyDesc(e.target.value)} />
+                <input className={styles.surveyDesc} placeholder="Survey description" value={surveyDesc} onChange={(e)=>setSurveyDesc(sanitizeSurveyDescription(e.target.value))} />
               </div>
 
               <div className={styles.pagesWrap}>
@@ -1545,6 +1996,27 @@ export default function SurveyCreatePage() {
                       <div className={styles.elementType}>{el.type}</div>
                       <input className={styles.questionInput} value={el.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,title:e.target.value}:item)}:p))} placeholder="Question" />
                       <input className={styles.questionSub} value={el.subtitle} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,elements:p.elements.map((item)=>item.id===el.id?{...item,subtitle:e.target.value}:item)}:p))} placeholder="Subtitle (optional)" />
+
+                      {el.type === "text" ? (
+                        <div className={styles.builderFieldPreview}>
+                          <input className={styles.builderFieldInput} type="text" disabled placeholder={el.title || "Text input"} />
+                        </div>
+                      ) : null}
+
+                      {el.type === "date" ? (
+                        <div className={styles.builderFieldPreview}>
+                          <input className={styles.builderFieldInput} type="date" disabled />
+                        </div>
+                      ) : null}
+
+                      {el.type === "signature" ? (
+                        <div className={styles.builderFieldPreview}>
+                          <div className={styles.builderSignatureBox}>Klik tombol di bawah untuk menandatangani</div>
+                          <button type="button" className={styles.inlineButton} disabled>
+                            Tanda Tangan
+                          </button>
+                        </div>
+                      ) : null}
 
                       {el.type === "hero" ? (
                         <label className={styles.coverUpload}>
@@ -1649,6 +2121,42 @@ export default function SurveyCreatePage() {
                                   <option value="horizontal">Horizontal</option>
                                 </select>
                               </div>
+                              {el.type === "choice" ? (
+                                <div className={styles.settingRow}>
+                                  <span className={styles.settingLabel}>Selection</span>
+                                  <label className={styles.settingCheckLabel}>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(el.allowMultipleAnswers)}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        setPages((prev) =>
+                                          prev.map((p) =>
+                                            p.id === page.id
+                                              ? {
+                                                  ...p,
+                                                  elements: p.elements.map((item) =>
+                                                    item.id === el.id
+                                                      ? { ...item, allowMultipleAnswers: checked }
+                                                      : item,
+                                                  ),
+                                                }
+                                              : p,
+                                          ),
+                                        );
+                                        if (!checked) {
+                                          setPreviewValues((prev) => {
+                                            const current = prev[el.id];
+                                            if (!Array.isArray(current)) return prev;
+                                            return { ...prev, [el.id]: current[0] || "" };
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    Allow multiple answers
+                                  </label>
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
@@ -1749,7 +2257,7 @@ export default function SurveyCreatePage() {
                         <div className={styles.settingPanel}>
                           {(() => {
                             const ratingCandidates = page.elements.filter(
-                              (item, idx) => idx < elIndex && item.type === "rating",
+                              (item, idx) => idx < elIndex && (item.type === "rating" || item.type === "likert"),
                             );
                             const hasCandidates = ratingCandidates.length > 0;
                             const thresholdValue = Math.min(
@@ -1794,16 +2302,16 @@ export default function SurveyCreatePage() {
                                         );
                                       }}
                                     />
-                                    <span>Wajib isi jika rating di bawah threshold</span>
+                                    <span>Wajib isi jika score di bawah threshold</span>
                                   </label>
                                 </div>
                                 {!hasCandidates ? (
-                                  <div className={styles.settingHint}>Tambahkan elemen rating di atas komentar ini agar rule bisa diaktifkan.</div>
+                                  <div className={styles.settingHint}>Tambahkan elemen rating/likert di atas komentar ini agar rule bisa diaktifkan.</div>
                                 ) : null}
                                 {enabled && hasCandidates ? (
                                   <>
                                     <div className={styles.settingRow}>
-                                      <label className={styles.settingLabel}>Rating Source</label>
+                                      <label className={styles.settingLabel}>Score Source</label>
                                       <select
                                         className={styles.settingSelect}
                                         value={el.conditionalRequiredSourceId || selectedSourceId}
@@ -1829,7 +2337,7 @@ export default function SurveyCreatePage() {
                                       >
                                         {ratingCandidates.map((item, idx) => (
                                           <option key={`${el.id}-rating-source-${item.id}`} value={item.id}>
-                                            {item.title || `Rating ${idx + 1}`}
+                                            {item.title || `${item.type === "likert" ? "Likert" : "Rating"} ${idx + 1}`}
                                           </option>
                                         ))}
                                       </select>
@@ -1924,6 +2432,130 @@ export default function SurveyCreatePage() {
       {showSchedule ? <div className={styles.overlay} onClick={()=>setShowSchedule(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Schedule Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowSchedule(false)}>Close</button></div><div className={styles.modalBody}><label>Start Date<input type="date" value={scheduleStart} onChange={(e)=>setScheduleStart(e.target.value)} /></label><label>End Date<input type="date" value={scheduleEnd} onChange={(e)=>setScheduleEnd(e.target.value)} /></label></div></div></div> : null}
 
       {showStyle ? <div className={styles.overlay} onClick={()=>setShowStyle(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Style Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowStyle(false)}>Close</button></div><div className={styles.modalBody}><label>Your Logo<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setLogo)} /></label><label>Background Color<input type="color" value={bgColor} onChange={(e)=>setBgColor(e.target.value)} /></label><label>Background Image<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setBgImage)} /></label><label>Font<select value={font} onChange={(e)=>setFont(e.target.value as FontPreset)}><option value="default">Default</option><option value="georgia">Georgia</option><option value="trebuchet">Trebuchet MS</option><option value="verdana">Verdana</option><option value="tahoma">Tahoma</option><option value="courier">Courier New</option></select></label></div></div></div> : null}
+
+      {showTemplatePicker ? (
+        <div className={styles.overlay} onClick={() => { setShowTemplatePicker(false); setShowTemplateConfirm(false); }}>
+          <div className={`${styles.modal} ${styles.templateModal}`} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHead}>
+              <h2>Choose Template</h2>
+              <button className={styles.inlineButton} type="button" onClick={() => { setShowTemplatePicker(false); setShowTemplateConfirm(false); }}>
+                Close
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <div className={styles.templateToolbar}>
+                <input
+                  className={styles.templateSearch}
+                  placeholder="Search templates"
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                />
+                <div className={styles.templateCategories}>
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "feedback", label: "Feedback" },
+                    { id: "employee", label: "Employee" },
+                    { id: "service", label: "Service" },
+                    { id: "compliance", label: "Compliance" },
+                    { id: "event", label: "Event" },
+                  ].map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      className={`${styles.templateChip} ${templateCategory === category.id ? styles.templateChipActive : ""}`}
+                      onClick={() => setTemplateCategory(category.id as "all" | BuilderTemplate["category"])}
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.templateGrid}>
+                {filteredTemplates.length === 0 ? (
+                  <div className={styles.templateEmpty}>No template matched your search/filter.</div>
+                ) : (
+                  filteredTemplates.map((template) => {
+                    const elementCount = template.pages.reduce((sum, page) => sum + page.elements.length, 0);
+                    const templateElementTypes = Array.from(
+                      new Set(template.pages.flatMap((page) => page.elements.map((element) => element.type))),
+                    ).slice(0, 5);
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        className={`${styles.templateCard} ${selectedTemplateId === template.id ? styles.templateCardActive : ""}`}
+                        onClick={() => onSelectTemplate(template.id)}
+                      >
+                        <div className={styles.templateThumb} style={getTemplatePreviewStyle(template)}>
+                          <div className={styles.templateThumbHeader}>
+                            <span className={styles.templateThumbBadge}>{template.category}</span>
+                          </div>
+                          <div className={styles.templateThumbOverlay}>
+                            <div className={styles.templateThumbTitleLine}>
+                              {template.name.toLowerCase()}
+                            </div>
+                            <div className={styles.templateThumbSubLine}>
+                              {template.description.slice(0, 44)}
+                            </div>
+                          </div>
+                          <div className={styles.templateThumbBars}>
+                            {template.pages.map((page, index) => {
+                              const type = templateElementTypes[index % Math.max(templateElementTypes.length, 1)];
+                              const icon = type ? elementIconMap[type] : "•";
+                              return (
+                              <span
+                                key={`${template.id}-bar-${index + 1}`}
+                                className={styles.templateThumbBar}
+                                style={{ width: `${Math.max(28, Math.min(100, page.elements.length * 16))}%` }}
+                              >
+                                <span className={styles.templateThumbBarIcon}>{icon}</span>
+                              </span>
+                            )})}
+                          </div>
+                        </div>
+                        <div className={styles.templateName}>{template.name}</div>
+                        <div className={styles.templateDesc}>{template.description}</div>
+                        <div className={styles.templateMeta}>
+                          <span>{template.pages.length} pages</span>
+                          <span>{elementCount} elements</span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className={styles.templateActions}>
+                <button type="button" className={styles.sideAction} onClick={() => { setShowTemplatePicker(false); setShowTemplateConfirm(false); }}>
+                  Cancel
+                </button>
+                <button type="button" className={styles.sideActionPrimary} disabled={!selectedTemplate} onClick={onApplySelectedTemplate}>
+                  Apply Template
+                </button>
+              </div>
+
+              {showTemplateConfirm && selectedTemplate ? (
+                <div className={styles.templateConfirmBox}>
+                  <div className={styles.templateConfirmTitle}>Replace current builder content?</div>
+                  <div className={styles.templateConfirmText}>
+                    Current pages and elements akan diganti dengan template <strong>{selectedTemplate.name}</strong>.
+                    Gunakan Save Draft setelah apply agar tersimpan ke server.
+                  </div>
+                  <div className={styles.templateConfirmActions}>
+                    <button type="button" className={styles.sideAction} onClick={() => setShowTemplateConfirm(false)}>
+                      Back
+                    </button>
+                    <button type="button" className={styles.sideActionPrimary} onClick={() => applyTemplate(selectedTemplate)}>
+                      Yes, Replace
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
     </section>
   );

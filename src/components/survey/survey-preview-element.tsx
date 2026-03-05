@@ -24,6 +24,7 @@ export interface PreviewElement {
   coverUrl: string;
   dataSource?: DataSourceType;
   optionLayout?: "vertical" | "horizontal";
+  allowMultipleAnswers?: boolean;
   displayCondition?: "always" | "after_mapped_selection";
   conditionalRequiredSourceId?: string;
   conditionalRequiredThreshold?: number;
@@ -310,11 +311,18 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
     if (uniqueOptionSet.length === 0 && mappedEmptyMessage) {
       return <div className={styles.previewHint}>{mappedEmptyMessage}</div>;
     }
+    const selected = Array.isArray(values[element.id]) ? (values[element.id] as string[]) : [];
+    const allowMultipleAnswers = Boolean(element.allowMultipleAnswers);
     return (
       <div className={`${styles.previewOptions} ${element.optionLayout === "horizontal" ? styles.previewOptionsHorizontal : styles.previewOptionsVertical}`}>
         {uniqueOptionSet.map((option, idx) => (
           <label key={`${element.id}-${option}-${idx}`} className={styles.previewOptionItem}>
-            <input type="radio" name={element.id} checked={values[element.id] === option} onChange={() => onSetValue(element.id, option)} />
+            <input
+              type={allowMultipleAnswers ? "checkbox" : "radio"}
+              name={allowMultipleAnswers ? `${element.id}-${idx}` : element.id}
+              checked={allowMultipleAnswers ? selected.includes(option) : values[element.id] === option}
+              onChange={() => (allowMultipleAnswers ? onToggleCheckbox(element.id, option) : onSetValue(element.id, option))}
+            />
             <span>{option}</span>
           </label>
         ))}

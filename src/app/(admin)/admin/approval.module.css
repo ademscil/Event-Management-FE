@@ -14,6 +14,10 @@
   flex-wrap: wrap;
 }
 
+.statusRegion {
+  min-height: 20px;
+}
+
 .tabButton {
   border: 1px solid #d1d5db;
   background: #ffffff;
@@ -186,6 +190,20 @@
   cursor: pointer;
 }
 
+.tabButton:focus-visible,
+.btnPrimary:focus-visible,
+.btnSecondary:focus-visible,
+.btnDanger:focus-visible,
+.btnGhost:focus-visible,
+.link:focus-visible,
+.closeBtn:focus-visible,
+.textarea:focus-visible,
+.actions input[type="checkbox"]:focus-visible,
+table input[type="checkbox"]:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
 .modalBody {
   padding: 18px 20px;
 }
@@ -216,3 +234,15 @@
   font-size: 13px;
 }
 
+@media (max-width: 900px) {
+  .modalHeader,
+  .modalBody,
+  .modalActions {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .modalTitle {
+    font-size: 16px;
+  }
+}

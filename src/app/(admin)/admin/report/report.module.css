@@ -3,6 +3,22 @@
   color: #1d4ed8;
 }
 
+.statusRegion {
+  min-height: 20px;
+}
+
+.errorText {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.successText {
+  margin: 0;
+  color: #065f46;
+  font-size: 12px;
+}
+
 .statusText {
   text-transform: capitalize;
 }
@@ -50,6 +66,17 @@
   cursor: not-allowed;
 }
 
+.buttonPrimaryXs:focus-visible,
+.buttonSecondaryXs:focus-visible,
+.buttonGhostXs:focus-visible,
+.questionLink:focus-visible,
+.modalClose:focus-visible,
+.fieldControl:focus-visible,
+.searchInlineInput:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
 .searchInlineRow {
   display: flex;
   align-items: center;
@@ -78,6 +105,11 @@
   flex: 1;
   min-width: 280px;
   max-width: 570px;
+}
+
+.searchInlineStatus {
+  width: 180px;
+  min-width: 180px;
 }
 
 .statsGrid {
@@ -254,5 +286,14 @@
 
   .searchInlineInput {
     max-width: 100%;
+  }
+
+  .searchInlineStatus {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .actions {
+    gap: 6px;
   }
 }

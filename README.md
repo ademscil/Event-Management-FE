@@ -52,6 +52,10 @@ npm.cmd run dev:3001
   - `/admin/event-management`
   - `/admin/master-user`
 
+## Dokumentasi Developer
+
+- Panduan lengkap developer tersedia di [docs/developer-guide.md](docs/developer-guide.md)
+
 ## Catatan Teknis
 
 - Frontend memanggil API melalui path `/api/*`.

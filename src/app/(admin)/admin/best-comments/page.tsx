@@ -30,7 +30,7 @@ function shortText(value?: string | null, max = 72): string {
 
 export default function BestCommentsPage() {
   const role: UserRole | null = getCurrentUser()?.role ?? null;
-  const canAccess = role === "AdminEvent" || role === "DepartmentHead" || role === "ITLead";
+  const canAccess = role === "AdminEvent" || role === "DepartmentHead";
   const canEdit = role === "AdminEvent";
 
   const [tab, setTab] = useState<Tab>("comments");
@@ -48,17 +48,22 @@ export default function BestCommentsPage() {
 
   useEffect(() => {
     const run = async () => {
-      const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
-      if (!surveyRes.success) {
+      try {
+        const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
+        if (!surveyRes.success) {
+          setLoading(false);
+          setError(surveyRes.message || "Gagal memuat survey");
+          return;
+        }
+        setSurveys(surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title })));
+        if (functionRes.success) {
+          setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
+        }
+      } catch {
+        setError("Gagal memuat data awal best comments.");
+      } finally {
         setLoading(false);
-        setError(surveyRes.message || "Gagal memuat survey");
-        return;
       }
-      setSurveys(surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title })));
-      if (functionRes.success) {
-        setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
-      }
-      setLoading(false);
     };
     void run();
   }, []);
@@ -66,23 +71,29 @@ export default function BestCommentsPage() {
   const loadData = async () => {
     const selectedSurvey = surveyId === "all" ? undefined : surveyId;
     const selectedFunction = functionId === "all" ? undefined : functionId;
-    const [commentRes, bestRes] = await Promise.all([
-      fetchCommentsForSelection({ surveyId: selectedSurvey, functionId: selectedFunction }),
-      fetchBestCommentsWithFeedback({ surveyId: selectedSurvey, functionId: selectedFunction }),
-    ]);
+    try {
+      const [commentRes, bestRes] = await Promise.all([
+        fetchCommentsForSelection({ surveyId: selectedSurvey, functionId: selectedFunction }),
+        fetchBestCommentsWithFeedback({ surveyId: selectedSurvey, functionId: selectedFunction }),
+      ]);
 
-    if (!commentRes.success) {
-      setError(commentRes.message);
+      if (!commentRes.success) {
+        setError(commentRes.message);
+        setComments([]);
+      } else {
+        setComments(commentRes.data);
+      }
+
+      if (!bestRes.success) {
+        setError((prev) => prev || bestRes.message);
+        setBestRows([]);
+      } else {
+        setBestRows(bestRes.data);
+      }
+    } catch {
+      setError("Terjadi kesalahan saat memuat data best comments.");
       setComments([]);
-    } else {
-      setComments(commentRes.data);
-    }
-
-    if (!bestRes.success) {
-      setError((prev) => prev || bestRes.message);
       setBestRows([]);
-    } else {
-      setBestRows(bestRes.data);
     }
   };
 
@@ -156,11 +167,13 @@ export default function BestCommentsPage() {
       <div className={baseStyles.pageHead}>
         <div>
           <h1 className={baseStyles.title}>Best Comments Management</h1>
-          <div className={baseStyles.subtitle}>Kelola komentar terbaik dari responden survey.</div>
+          <div className={baseStyles.subtitle}>
+            {canEdit ? "Kelola komentar terbaik dari responden survey." : "Lihat komentar terbaik survey (readonly)."}
+          </div>
         </div>
       </div>
 
-      <section className={baseStyles.panel}>
+      <section className={baseStyles.panel} aria-busy={loading}>
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
@@ -196,9 +209,11 @@ export default function BestCommentsPage() {
           </button>
         </div>
 
-        {loading ? <p className={styles.meta}>Memuat data...</p> : null}
-        {error ? <p className={styles.error}>{error}</p> : null}
-        {message ? <p className={styles.success}>{message}</p> : null}
+        <div className={styles.statusRegion} aria-live="polite">
+          {loading ? <p className={styles.meta}>Memuat data...</p> : null}
+          {error ? <p className={styles.error}>{error}</p> : null}
+          {message ? <p className={styles.success}>{message}</p> : null}
+        </div>
 
         {tab === "comments" ? (
           <>
@@ -206,10 +221,10 @@ export default function BestCommentsPage() {
               <span className={styles.meta}>Showing {comments.length} comments</span>
               {canEdit ? (
                 <div className={styles.actions}>
-                  <button type="button" className={styles.btnPrimary} onClick={() => void saveBestComments()}>
+                  <button type="button" className={styles.btnPrimary} onClick={() => void saveBestComments()} disabled={selectedRows.length === 0}>
                     Save Best Comments
                   </button>
-                  <button type="button" className={styles.btnSecondary} onClick={() => setSelectedKeys([])}>
+                  <button type="button" className={styles.btnSecondary} onClick={() => setSelectedKeys([])} disabled={selectedKeys.length === 0}>
                     Clear Selection
                   </button>
                 </div>
@@ -220,11 +235,12 @@ export default function BestCommentsPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>
+                    <th scope="col">
                       {canEdit ? (
                         <input
                           type="checkbox"
                           checked={selectedKeys.length > 0 && selectedKeys.length === comments.length}
+                          aria-label="Pilih semua komentar"
                           onChange={(event) =>
                             setSelectedKeys(event.target.checked ? comments.map((row) => `${row.ResponseId}-${row.QuestionId}`) : [])
                           }
@@ -233,12 +249,12 @@ export default function BestCommentsPage() {
                         "Status"
                       )}
                     </th>
-                    <th>Responden</th>
-                    <th>Aplikasi</th>
-                    <th>Pertanyaan</th>
-                    <th>Komentar</th>
-                    <th>Score</th>
-                    {canEdit ? <th>Action</th> : null}
+                    <th scope="col">Responden</th>
+                    <th scope="col">Aplikasi</th>
+                    <th scope="col">Pertanyaan</th>
+                    <th scope="col">Komentar</th>
+                    <th scope="col">Score</th>
+                    {canEdit ? <th scope="col">Action</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -257,10 +273,12 @@ export default function BestCommentsPage() {
                               <input
                                 type="checkbox"
                                 checked={selected}
+                                aria-label={`Pilih komentar ${row.QuestionResponseId}`}
                                 onChange={(event) =>
-                                  setSelectedKeys((prev) =>
-                                    event.target.checked ? [...prev, key] : prev.filter((item) => item !== key)
-                                  )
+                                  setSelectedKeys((prev) => {
+                                    if (event.target.checked) return Array.from(new Set([...prev, key]));
+                                    return prev.filter((item) => item !== key);
+                                  })
                                 }
                               />
                             ) : (
@@ -315,10 +333,10 @@ export default function BestCommentsPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>Survey</th>
-                    <th>Function</th>
-                    <th>IT Lead</th>
-                    <th>Feedback</th>
+                    <th scope="col">Survey</th>
+                    <th scope="col">Function</th>
+                    <th scope="col">IT Lead</th>
+                    <th scope="col">Feedback</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -345,11 +363,11 @@ export default function BestCommentsPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail komentar" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Comment Detail</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })}>
-                x
+              <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">
+                ×
               </button>
             </header>
             <div className={styles.modalBody}>
