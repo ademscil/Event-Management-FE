@@ -30,6 +30,8 @@ function menuIconClass(icon: NavigationItem["icon"]): string {
       return styles.menuMappingFunction;
     case "masterUser":
       return styles.menuMasterUser;
+    case "auditTrail":
+      return styles.menuAuditTrail;
     default:
       return styles.menuDashboard;
   }

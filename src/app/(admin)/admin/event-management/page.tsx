@@ -57,6 +57,13 @@ function getStatusClass(status: string): string {
   return styles.badgeClosed;
 }
 
+function sanitizeSurveyDescription(value: string): string {
+  return value
+    .replace(/\s*\[Admin Event Target:[^\]]*\]\s*/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function matchesDateRange(survey: SurveyOverviewItem, start: string, end: string): boolean {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -231,10 +238,12 @@ export default function EventManagementPage() {
       return;
     }
 
+    const cleanedDescription = sanitizeSurveyDescription(draftDescription);
+
     setSubmitting(true);
     const createResult = await createEventDraft({
       title: draftName.trim(),
-      description: draftDescription.trim(),
+      description: cleanedDescription,
       assignedAdminId: selectedAdminEvents[0]?.UserId,
     });
     setSubmitting(false);
@@ -536,7 +545,7 @@ export default function EventManagementPage() {
                     onBlur={() => {
                       setTimeout(() => setShowAdminSuggestion(false), 120);
                     }}
-                    placeholder={selectedAdminEvents.length === 0 ? "e.g. Firman" : "Tambah Admin Event"}
+                    placeholder={selectedAdminEvents.length === 0 ? "Cari Admin Event" : "Tambah Admin Event"}
                     type="text"
                     autoComplete="off"
                   />
@@ -566,7 +575,7 @@ export default function EventManagementPage() {
                   className={styles.textarea}
                   value={draftDescription}
                   onChange={(event) => setDraftDescription(event.target.value)}
-                  placeholder="Survey description"
+                  placeholder="Jelaskan tujuan survey secara singkat"
                   rows={3}
                 />
               </div>

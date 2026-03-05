@@ -66,50 +66,65 @@ export default function ApprovalItLeadPage() {
 
   useEffect(() => {
     const run = async () => {
-      const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
-      if (!surveyRes.success) {
-        setLoading(false);
-        setError(surveyRes.message || "Gagal memuat survey");
-        return;
-      }
+      try {
+        const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
+        if (!surveyRes.success) {
+          setLoading(false);
+          setError(surveyRes.message || "Gagal memuat survey");
+          return;
+        }
 
-      const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
-      setSurveys(surveyOptions);
-      setSurveyId(surveyOptions[0]?.id || "");
-      if (functionRes.success) {
-        setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
+        const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
+        setSurveys(surveyOptions);
+        setSurveyId(surveyOptions[0]?.id || "");
+        if (functionRes.success) {
+          setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
+        }
+      } catch {
+        setError("Gagal memuat data awal approval IT Lead.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     void run();
   }, []);
 
   const loadData = async () => {
-    if (!surveyId) return;
+    if (!surveyId) {
+      setPendingRows([]);
+      setFeedbackRows([]);
+      return;
+    }
     setError("");
     setMessage("");
-    const [pendingRes, feedbackRes] = await Promise.all([
-      fetchPendingApprovals({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
-      fetchBestCommentsWithFeedback({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
-    ]);
+    try {
+      const [pendingRes, feedbackRes] = await Promise.all([
+        fetchPendingApprovals({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
+        fetchBestCommentsWithFeedback({ surveyId, functionId: functionId === "all" ? undefined : functionId }),
+      ]);
 
-    if (!pendingRes.success) {
-      setError(pendingRes.message);
+      if (!pendingRes.success) {
+        setError(pendingRes.message);
+        setPendingRows([]);
+      } else {
+        setPendingRows(pendingRes.data);
+      }
+
+      if (!feedbackRes.success) {
+        setError((prev) => prev || feedbackRes.message);
+        setFeedbackRows([]);
+      } else {
+        setFeedbackRows(feedbackRes.data);
+        const map: Record<string, string> = {};
+        feedbackRes.data.forEach((row) => {
+          map[row.QuestionResponseId] = row.FeedbackText || "";
+        });
+        setFeedbackDraft(map);
+      }
+    } catch {
+      setError("Terjadi kesalahan saat memuat data approval IT Lead.");
       setPendingRows([]);
-    } else {
-      setPendingRows(pendingRes.data);
-    }
-
-    if (!feedbackRes.success) {
-      setError((prev) => prev || feedbackRes.message);
       setFeedbackRows([]);
-    } else {
-      setFeedbackRows(feedbackRes.data);
-      const map: Record<string, string> = {};
-      feedbackRes.data.forEach((row) => {
-        map[row.QuestionResponseId] = row.FeedbackText || "";
-      });
-      setFeedbackDraft(map);
     }
   };
 
@@ -191,7 +206,7 @@ export default function ApprovalItLeadPage() {
 
   if (!canAccess) {
     return (
-      <section className={baseStyles.panel}>
+      <section className={baseStyles.panel} aria-busy={loading}>
         <h1 className={baseStyles.title}>Akses Ditolak</h1>
         <p className={baseStyles.subtitle}>Halaman Approval IT Lead hanya untuk role IT Lead.</p>
       </section>
@@ -246,19 +261,21 @@ export default function ApprovalItLeadPage() {
           </button>
         </div>
 
-        {loading ? <p className={styles.meta}>Memuat data...</p> : null}
-        {error ? <p className={styles.error}>{error}</p> : null}
-        {message ? <p className={styles.success}>{message}</p> : null}
+        <div className={styles.statusRegion} aria-live="polite">
+          {loading ? <p className={styles.meta}>Memuat data...</p> : null}
+          {error ? <p className={styles.error}>{error}</p> : null}
+          {message ? <p className={styles.success}>{message}</p> : null}
+        </div>
 
         {tab === "takeout" ? (
           <>
             <div className={styles.toolbar}>
               <span className={styles.meta}>Showing {pendingRows.length} pending approvals</span>
               <div className={styles.actions}>
-                <button type="button" className={styles.btnPrimary} onClick={() => void handleApprove()}>
+                <button type="button" className={styles.btnPrimary} onClick={() => void handleApprove()} disabled={selectedRows.length === 0}>
                   Approve Selected
                 </button>
-                <button type="button" className={styles.btnDanger} onClick={() => setRejectOpen(true)}>
+                <button type="button" className={styles.btnDanger} onClick={() => setRejectOpen(true)} disabled={selectedRows.length === 0}>
                   Reject Selected
                 </button>
               </div>
@@ -268,15 +285,16 @@ export default function ApprovalItLeadPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>Responden</th>
-                    <th>Department</th>
-                    <th>Aplikasi</th>
-                    <th>Pertanyaan</th>
-                    <th>Score</th>
-                    <th>Komentar</th>
-                    <th>Alasan Takeout</th>
-                    <th>
+                    <th scope="col">Responden</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Aplikasi</th>
+                    <th scope="col">Pertanyaan</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Komentar</th>
+                    <th scope="col">Alasan Takeout</th>
+                    <th scope="col">
                       <input
+                        aria-label="Pilih semua pending takeout"
                         type="checkbox"
                         checked={selectedKeys.length > 0 && selectedKeys.length === pendingRows.length}
                         onChange={(event) =>
@@ -305,12 +323,14 @@ export default function ApprovalItLeadPage() {
                           <td>{shortText(row.TakeoutReason)}</td>
                           <td className={styles.center}>
                             <input
+                              aria-label={`Pilih takeout ${row.QuestionResponseId}`}
                               type="checkbox"
                               checked={selectedKeys.includes(key)}
                               onChange={(event) =>
-                                setSelectedKeys((prev) =>
-                                  event.target.checked ? [...prev, key] : prev.filter((item) => item !== key)
-                                )
+                                setSelectedKeys((prev) => {
+                                  if (event.target.checked) return Array.from(new Set([...prev, key]));
+                                  return prev.filter((item) => item !== key);
+                                })
                               }
                             />
                           </td>
@@ -331,13 +351,13 @@ export default function ApprovalItLeadPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th>Responden</th>
-                    <th>Aplikasi</th>
-                    <th>Pertanyaan</th>
-                    <th>Komentar</th>
-                    <th>Score</th>
-                    <th>IT Lead Feedback</th>
-                    <th>Action</th>
+                    <th scope="col">Responden</th>
+                    <th scope="col">Aplikasi</th>
+                    <th scope="col">Pertanyaan</th>
+                    <th scope="col">Komentar</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">IT Lead Feedback</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -357,6 +377,7 @@ export default function ApprovalItLeadPage() {
                           <textarea
                             className={styles.textarea}
                             rows={2}
+                            aria-label={`Feedback IT Lead untuk ${row.QuestionResponseId}`}
                             value={feedbackDraft[row.QuestionResponseId] || ""}
                             onChange={(event) => setFeedbackDraft((prev) => ({ ...prev, [row.QuestionResponseId]: event.target.value }))}
                           />
@@ -378,11 +399,11 @@ export default function ApprovalItLeadPage() {
 
       {rejectOpen ? (
         <div className={styles.modalOverlay} onClick={() => setRejectOpen(false)}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject takeout" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Reject Selected Takeout</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)}>
-                x
+              <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)} aria-label="Tutup modal reject takeout">
+                ×
               </button>
             </header>
             <div className={styles.modalBody}>

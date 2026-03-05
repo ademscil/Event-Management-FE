@@ -83,6 +83,7 @@ export default function ReportSelectionPage() {
   const [message, setMessage] = useState("");
 
   const [surveySearch, setSurveySearch] = useState("");
+  const [eventStatusFilter, setEventStatusFilter] = useState<string>("all");
   const [selectedTakeoutSurvey, setSelectedTakeoutSurvey] = useState<string>(preselectedSurveyId || "all");
   const [selectedFunctionId, setSelectedFunctionId] = useState<string>("all");
   const [functionOptions, setFunctionOptions] = useState<Array<{ value: string; label: string }>>([{ value: "all", label: "All Functions" }]);
@@ -94,26 +95,31 @@ export default function ReportSelectionPage() {
 
   useEffect(() => {
     const run = async () => {
-      const [listResult, functionResult] = await Promise.all([
-        fetchReportSelectionList(),
-        fetchFunctionsMaster(),
-      ]);
+      try {
+        const [listResult, functionResult] = await Promise.all([
+          fetchReportSelectionList(),
+          fetchFunctionsMaster(),
+        ]);
 
-      setLoading(false);
+        if (!listResult.success) {
+          setError(listResult.message || "Gagal memuat daftar event report");
+          setSurveys([]);
+        } else {
+          setError("");
+          setSurveys(listResult.surveys);
+        }
 
-      if (!listResult.success) {
-        setError(listResult.message || "Gagal memuat daftar event report");
+        if (functionResult.success) {
+          const dynamic = functionResult.data
+            .filter((item) => item.IsActive !== false)
+            .map((item) => ({ value: item.FunctionId, label: item.Name }));
+          setFunctionOptions([{ value: "all", label: "All Functions" }, ...dynamic]);
+        }
+      } catch {
+        setError("Terjadi kesalahan saat memuat data report.");
         setSurveys([]);
-      } else {
-        setError("");
-        setSurveys(listResult.surveys);
-      }
-
-      if (functionResult.success) {
-        const dynamic = functionResult.data
-          .filter((item) => item.IsActive !== false)
-          .map((item) => ({ value: item.FunctionId, label: item.Name }));
-        setFunctionOptions([{ value: "all", label: "All Functions" }, ...dynamic]);
+      } finally {
+        setLoading(false);
       }
     };
     void run();
@@ -121,13 +127,17 @@ export default function ReportSelectionPage() {
 
   const filteredSurveyRows = useMemo(() => {
     const term = surveySearch.trim().toLowerCase();
-    if (!term) return surveys;
     return surveys.filter((item) => {
+      if (eventStatusFilter !== "all") {
+        const normalizedStatus = mapSelectionStatus(item);
+        if (normalizedStatus !== eventStatusFilter) return false;
+      }
+      if (!term) return true;
       const name = String(item.title || "").toLowerCase();
       const period = String(item.period || "").toLowerCase();
       return name.includes(term) || period.includes(term);
     });
-  }, [surveySearch, surveys]);
+  }, [eventStatusFilter, surveySearch, surveys]);
 
   const lastUpdatedText = useMemo(() => {
     if (surveys.length === 0) return "-";
@@ -150,6 +160,18 @@ export default function ReportSelectionPage() {
     ],
     []
   );
+  const eventStatusOptions = useMemo(
+    () => [
+      { value: "all", label: "All Status" },
+      { value: "generated", label: "Generated" },
+      { value: "active", label: "Active" },
+      { value: "draft", label: "Draft" },
+      { value: "closed", label: "Closed" },
+      { value: "archived", label: "Archived" },
+      { value: "other", label: "Other" },
+    ],
+    []
+  );
 
   const loadTakeoutRows = async () => {
     setTakeoutLoading(true);
@@ -169,29 +191,36 @@ export default function ReportSelectionPage() {
     const functionId = selectedFunctionId === "all" ? undefined : selectedFunctionId;
     const allRows: TakeoutTableRow[] = [];
 
-    for (const survey of surveyTargets) {
-      const result = await fetchTakeoutComparison({ surveyId: survey.surveyId, functionId });
-      if (!result.success) {
-        setError(result.message || "Gagal memuat comparison takeout");
-        setTakeoutLoading(false);
-        return;
-      }
+    try {
+      for (const survey of surveyTargets) {
+        const result = await fetchTakeoutComparison({ surveyId: survey.surveyId, functionId });
+        if (!result.success) {
+          setError(result.message || "Gagal memuat comparison takeout");
+          setTakeoutLoading(false);
+          return;
+        }
 
-      result.comparison.forEach((item: TakeoutComparisonRow, index) => {
-        allRows.push({
-          surveyId: survey.surveyId,
-          surveyTitle: survey.title,
-          functionName: selectedFunctionId === "all" ? "-" : selectedFunctionLabel,
-          respondent: "-",
-          application: "-",
-          questionCode: `Q${index + 1}`,
-          questionText: item.questionText || "Question",
-          scoreBefore: item.avgScoreBefore,
-          scoreAfter: item.avgScoreAfter,
-          isTakeout: Number(item.takeoutCount || 0) > 0,
-          reason: String(item.takeoutReasons || "").trim(),
+        result.comparison.forEach((item: TakeoutComparisonRow, index) => {
+          allRows.push({
+            surveyId: survey.surveyId,
+            surveyTitle: survey.title,
+            functionName: selectedFunctionId === "all" ? "-" : selectedFunctionLabel,
+            respondent: "-",
+            application: "-",
+            questionCode: `Q${index + 1}`,
+            questionText: item.questionText || "Question",
+            scoreBefore: item.avgScoreBefore,
+            scoreAfter: item.avgScoreAfter,
+            isTakeout: Number(item.takeoutCount || 0) > 0,
+            reason: String(item.takeoutReasons || "").trim(),
+          });
         });
-      });
+      }
+    } catch {
+      setError("Terjadi kesalahan saat memuat data comparison takeout.");
+      setTakeoutRows([]);
+      setTakeoutLoading(false);
+      return;
     }
 
     setTakeoutRows(allRows);
@@ -295,21 +324,29 @@ export default function ReportSelectionPage() {
             value={surveySearch}
             onChange={(event) => setSurveySearch(event.target.value)}
           />
+          <Dropdown
+            className={styles.searchInlineStatus}
+            options={eventStatusOptions}
+            value={eventStatusFilter}
+            onChange={setEventStatusFilter}
+          />
         </div>
 
-        {loading ? <p className={baseStyles.meta}>Memuat event report...</p> : null}
-        {error ? <p className={baseStyles.meta}>{error}</p> : null}
-        {message ? <p className={baseStyles.meta}>{message}</p> : null}
+        <div className={styles.statusRegion} aria-live="polite">
+          {loading ? <p className={baseStyles.meta}>Memuat event report...</p> : null}
+          {error ? <p className={styles.errorText}>{error}</p> : null}
+          {message ? <p className={styles.successText}>{message}</p> : null}
+        </div>
 
         <div className={baseStyles.tableWrap}>
           <table className={baseStyles.table}>
             <thead>
               <tr>
-                <th>Nama Event</th>
-                <th>Periode</th>
-                <th>Status</th>
-                <th>Responden</th>
-                <th>Aksi</th>
+                <th scope="col">Nama Event</th>
+                <th scope="col">Periode</th>
+                <th scope="col">Status</th>
+                <th scope="col">Responden</th>
+                <th scope="col">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -441,15 +478,15 @@ export default function ReportSelectionPage() {
           <table className={baseStyles.table}>
             <thead>
               <tr>
-                <th>Survey</th>
-                <th>Function</th>
-                <th>Responden</th>
-                <th>Aplikasi</th>
-                <th>Question</th>
-                <th className={styles.scoreCenter}>Score Before</th>
-                <th className={styles.scoreCenter}>Takeout</th>
-                <th className={styles.scoreCenter}>Score After</th>
-                <th>Alasan Takeout</th>
+                <th scope="col">Survey</th>
+                <th scope="col">Function</th>
+                <th scope="col">Responden</th>
+                <th scope="col">Aplikasi</th>
+                <th scope="col">Question</th>
+                <th scope="col" className={styles.scoreCenter}>Score Before</th>
+                <th scope="col" className={styles.scoreCenter}>Takeout</th>
+                <th scope="col" className={styles.scoreCenter}>Score After</th>
+                <th scope="col">Alasan Takeout</th>
               </tr>
             </thead>
             <tbody>
@@ -493,12 +530,12 @@ export default function ReportSelectionPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             {modal.type === "confirm-generate" ? (
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Generate Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })}>x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">×</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Generate report untuk &quot;{modal.survey.title}&quot; sekarang?</p>
@@ -514,7 +551,7 @@ export default function ReportSelectionPage() {
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })}>x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">×</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}><strong>Pertanyaan:</strong> {modal.row.questionText}</p>
@@ -530,7 +567,7 @@ export default function ReportSelectionPage() {
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Export Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })}>x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">×</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Survey: {modal.survey.title}</p>
