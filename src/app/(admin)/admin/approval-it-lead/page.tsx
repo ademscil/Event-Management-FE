@@ -281,6 +281,8 @@ export default function ApprovalItLeadPage() {
               </div>
             </div>
 
+            {selectedRows.length > 0 ? <div className={styles.selectionHint}>Selected takeout items: {selectedRows.length}</div> : null}
+
             <div className={baseStyles.tableWrap}>
               <table className={baseStyles.table}>
                 <thead>
@@ -403,7 +405,7 @@ export default function ApprovalItLeadPage() {
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Reject Selected Takeout</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)} aria-label="Tutup modal reject takeout">
-                ×
+                x
               </button>
             </header>
             <div className={styles.modalBody}>
@@ -430,3 +432,4 @@ export default function ApprovalItLeadPage() {
     </>
   );
 }
+

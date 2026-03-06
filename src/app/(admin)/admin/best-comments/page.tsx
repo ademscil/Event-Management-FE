@@ -231,6 +231,9 @@ export default function BestCommentsPage() {
               ) : null}
             </div>
 
+            {canEdit && selectedRows.length > 0 ? <div className={styles.selectionHint}>Selected comments: {selectedRows.length}</div> : null}
+            {!canEdit ? <div className={styles.readonlyHint}>Role Department Head hanya dapat melihat best comments dan feedback yang sudah dipilih.</div> : null}
+
             <div className={baseStyles.tableWrap}>
               <table className={baseStyles.table}>
                 <thead>
@@ -367,7 +370,7 @@ export default function BestCommentsPage() {
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Comment Detail</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">
-                ×
+                x
               </button>
             </header>
             <div className={styles.modalBody}>
@@ -385,3 +388,4 @@ export default function BestCommentsPage() {
     </>
   );
 }
+

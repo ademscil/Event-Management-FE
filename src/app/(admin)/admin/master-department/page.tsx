@@ -7,6 +7,7 @@ import { Pagination } from "@/components/admin/pagination";
 import { SearchBar } from "@/components/admin/search-bar";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Dropdown } from "@/components/common/dropdown";
+import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import {
   createDepartmentMaster,
   fetchBusinessUnitsMaster,
@@ -64,8 +65,13 @@ export default function MasterDepartmentPage() {
 
   const [confirmTarget, setConfirmTarget] = useState<DepartmentRow | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState({ open: false, title: "", message: "" });
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  const showFeedback = (message: string, title = "Informasi") => {
+    setFeedbackDialog({ open: true, title, message });
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -191,7 +197,7 @@ export default function MasterDepartmentPage() {
 
   const onSubmit = async () => {
     if (!businessUnitId || !divisionId || !code.trim() || !name.trim()) {
-      window.alert("BU, Divisi, Dept Code, dan Department Name wajib diisi.");
+      showFeedback("BU, Divisi, Dept Code, dan Department Name wajib diisi.", "Validasi");
       return;
     }
 
@@ -204,7 +210,7 @@ export default function MasterDepartmentPage() {
       });
       setSubmitting(false);
       if (!result.success) {
-        window.alert(result.message);
+        showFeedback(result.message, "Gagal Menyimpan");
         return;
       }
       closeModal();
@@ -221,7 +227,7 @@ export default function MasterDepartmentPage() {
     setSubmitting(false);
 
     if (!result.success) {
-      window.alert(result.message);
+      showFeedback(result.message, "Gagal Menyimpan");
       return;
     }
 
@@ -240,7 +246,7 @@ export default function MasterDepartmentPage() {
     setConfirmLoading(false);
 
     if (!result.success) {
-      window.alert(result.message);
+      showFeedback(result.message, "Gagal Mengubah Status");
       return;
     }
 
@@ -516,6 +522,13 @@ export default function MasterDepartmentPage() {
         isLoading={confirmLoading}
         onCancel={() => setConfirmTarget(null)}
         onConfirm={onConfirmToggle}
+      />
+
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        onClose={() => setFeedbackDialog({ open: false, title: "", message: "" })}
       />
     </>
   );
