@@ -15,6 +15,7 @@ import { Pagination } from "@/components/admin/pagination";
 import { SearchBar } from "@/components/admin/search-bar";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Dropdown } from "@/components/common/dropdown";
+import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import styles from "../page-mockup.module.css";
 
 const ITEMS_PER_PAGE = 10;
@@ -88,6 +89,11 @@ export default function MasterUserPage() {
   const [confirmTargetUser, setConfirmTargetUser] = useState<UserListItem | null>(null);
   const [confirmNextIsActive, setConfirmNextIsActive] = useState(false);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState({ open: false, title: "", message: "" });
+
+  const showFeedback = (message: string, title = "Informasi") => {
+    setFeedbackDialog({ open: true, title, message });
+  };
 
   const filteredDivisions = divisions.filter(
     (division) => !newBusinessUnitId || division.BusinessUnitId === newBusinessUnitId
@@ -185,18 +191,18 @@ export default function MasterUserPage() {
     const fileInput = document.getElementById("master-user-file") as HTMLInputElement | null;
     const file = fileInput?.files?.[0];
     if (!file) {
-      window.alert("Pilih file Excel terlebih dahulu.");
+      showFeedback("Pilih file Excel terlebih dahulu.", "Validasi");
       return;
     }
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
-      window.alert("Format file harus Excel (.xlsx atau .xls).");
+      showFeedback("Format file harus Excel (.xlsx atau .xls).", "Validasi");
       return;
     }
 
     const result = await uploadUserFile(file);
     if (!result.success) {
-      window.alert(result.message || "Gagal upload file");
+      showFeedback(result.message || "Gagal upload file", "Gagal Upload");
       return;
     }
 
@@ -210,7 +216,7 @@ export default function MasterUserPage() {
         message += `... dan ${result.errors.length - 5} error lainnya`;
       }
     }
-    window.alert(message);
+    showFeedback(message, "Upload Berhasil");
     setSelectedFileName("No file chosen");
     if (fileInput) fileInput.value = "";
     await loadUsers(appliedKeyword);
@@ -225,7 +231,7 @@ export default function MasterUserPage() {
     void (async () => {
       const result = await downloadUserTemplateFile();
       if (!result.success || !result.blob) {
-        window.alert(result.message || "Gagal download template");
+        showFeedback(result.message || "Gagal download template", "Gagal Download");
         return;
       }
 
@@ -243,7 +249,7 @@ export default function MasterUserPage() {
   const onDownload = async () => {
     const result = await downloadUserList();
     if (!result.success || !result.blob) {
-      window.alert(result.message || "Gagal download user list");
+      showFeedback(result.message || "Gagal download user list", "Gagal Download");
       return;
     }
 
@@ -343,7 +349,7 @@ export default function MasterUserPage() {
     setConfirmSubmitting(false);
 
     if (!result.success) {
-      window.alert(result.message || "Gagal mengubah status user");
+      showFeedback(result.message || "Gagal mengubah status user", "Gagal Mengubah Status");
       return;
     }
 
@@ -353,15 +359,15 @@ export default function MasterUserPage() {
 
   const onSubmitUser = async () => {
     if (!newUsername.trim() || !newNpk.trim() || !newDisplayName.trim() || !newEmail.trim()) {
-      window.alert("Username, NPK, Name, dan Email wajib diisi.");
+      showFeedback("Username, NPK, Name, dan Email wajib diisi.", "Validasi");
       return;
     }
     if (!newBusinessUnitId || !newDivisionId || !newDepartmentId) {
-      window.alert("Business Unit, Divisi, dan Department wajib dipilih.");
+      showFeedback("Business Unit, Divisi, dan Department wajib dipilih.", "Validasi");
       return;
     }
     if (!newUseLdap && !editingUser && newPassword.trim().length < 8) {
-      window.alert("Password minimal 8 karakter untuk user non-LDAP.");
+      showFeedback("Password minimal 8 karakter untuk user non-LDAP.", "Validasi");
       return;
     }
 
@@ -383,7 +389,7 @@ export default function MasterUserPage() {
       setSubmittingUser(false);
 
       if (!createResult.success) {
-        window.alert(createResult.message || "Gagal membuat user");
+        showFeedback(createResult.message || "Gagal membuat user", "Gagal Menyimpan");
         return;
       }
 
@@ -406,7 +412,7 @@ export default function MasterUserPage() {
 
     if (!updateResult.success) {
       setSubmittingUser(false);
-      window.alert(updateResult.message || "Gagal memperbarui user");
+      showFeedback(updateResult.message || "Gagal memperbarui user", "Gagal Menyimpan");
       return;
     }
 
@@ -414,7 +420,7 @@ export default function MasterUserPage() {
       const ldapResult = await toggleUserLdap(editingUser.UserId, newUseLdap);
       if (!ldapResult.success) {
         setSubmittingUser(false);
-        window.alert(ldapResult.message || "Gagal memperbarui LDAP user");
+        showFeedback(ldapResult.message || "Gagal memperbarui LDAP user", "Gagal Menyimpan");
         return;
       }
     }
@@ -423,7 +429,7 @@ export default function MasterUserPage() {
       const passwordResult = await setUserPassword(editingUser.UserId, newPassword.trim());
       if (!passwordResult.success) {
         setSubmittingUser(false);
-        window.alert(passwordResult.message || "Gagal memperbarui password user");
+        showFeedback(passwordResult.message || "Gagal memperbarui password user", "Gagal Menyimpan");
         return;
       }
     }
@@ -825,6 +831,12 @@ export default function MasterUserPage() {
           void onConfirmToggleStatus();
         }}
         onCancel={closeStatusConfirm}
+      />
+      <FeedbackDialog
+        open={feedbackDialog.open}
+        title={feedbackDialog.title}
+        message={feedbackDialog.message}
+        onClose={() => setFeedbackDialog({ open: false, title: "", message: "" })}
       />
     </>
   );

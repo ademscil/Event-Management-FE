@@ -1,5 +1,6 @@
 "use client";
 
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import { getCurrentUser } from "@/lib/auth";
 import { fetchAuditLogs, type AuditLogItem } from "@/lib/audit";
@@ -20,6 +21,14 @@ const ACTION_OPTIONS = [
   { value: "Approve", label: "Approve" },
   { value: "Reject", label: "Reject" },
   { value: "Export", label: "Export" },
+];
+
+const SEARCH_BY_OPTIONS = [
+  { value: "all", label: "Search By" },
+  { value: "username", label: "Username" },
+  { value: "entityId", label: "Entity ID" },
+  { value: "ipAddress", label: "IP Address" },
+  { value: "userAgent", label: "User Agent" },
 ];
 
 type ModalState =
@@ -88,12 +97,14 @@ export default function AuditTrailPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [modal, setModal] = useState<ModalState>({ type: "none" });
 
-  const [usernameFilter, setUsernameFilter] = useState("");
+  const [keywordFilter, setKeywordFilter] = useState("");
+  const [searchBy, setSearchBy] = useState("all");
   const [entityTypeFilter, setEntityTypeFilter] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [appliedUsername, setAppliedUsername] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
   const [appliedEntityType, setAppliedEntityType] = useState("all");
   const [appliedAction, setAppliedAction] = useState("all");
   const [appliedStartDate, setAppliedStartDate] = useState("");
@@ -114,7 +125,8 @@ export default function AuditTrailPage() {
       const result = await fetchAuditLogs({
         page,
         pageSize: 20,
-        username: appliedUsername.trim() || undefined,
+        keyword: appliedKeyword.trim() || undefined,
+        searchBy: appliedSearchBy as "all" | "username" | "entityId" | "ipAddress" | "userAgent",
         action: appliedAction,
         entityType: appliedEntityType,
         startDate: appliedStartDate || undefined,
@@ -137,10 +149,11 @@ export default function AuditTrailPage() {
     };
 
     void run();
-  }, [canAccess, page, appliedUsername, appliedAction, appliedEntityType, appliedStartDate, appliedEndDate]);
+  }, [canAccess, page, appliedKeyword, appliedSearchBy, appliedAction, appliedEntityType, appliedStartDate, appliedEndDate]);
 
   const applyFilters = () => {
-    setAppliedUsername(usernameFilter);
+    setAppliedKeyword(keywordFilter);
+    setAppliedSearchBy(searchBy);
     setAppliedEntityType(entityTypeFilter);
     setAppliedAction(actionFilter);
     setAppliedStartDate(startDate);
@@ -149,13 +162,15 @@ export default function AuditTrailPage() {
   };
 
   const resetFilters = () => {
-    setUsernameFilter("");
+    setSearchBy("all");
+    setKeywordFilter("");
     setEntityTypeFilter("all");
     setActionFilter("all");
     setStartDate("");
     setEndDate("");
 
-    setAppliedUsername("");
+    setAppliedKeyword("");
+    setAppliedSearchBy("all");
     setAppliedEntityType("all");
     setAppliedAction("all");
     setAppliedStartDate("");
@@ -186,17 +201,31 @@ export default function AuditTrailPage() {
           <h2 className={baseStyles.panelTitle}>Filter Audit Log</h2>
         </div>
 
+        <SearchBar
+          rowClassName={baseStyles.masterSearchRow}
+          selectClassName={baseStyles.masterSearchSelect}
+          inputClassName={`${baseStyles.input} ${baseStyles.masterSearchInput}`}
+          buttonClassName={baseStyles.masterSearchButton}
+          options={SEARCH_BY_OPTIONS}
+          selectedValue={searchBy}
+          keyword={keywordFilter}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeywordFilter}
+          onButtonClick={applyFilters}
+          placeholder={
+            searchBy === "username"
+              ? "Cari username..."
+              : searchBy === "entityId"
+                ? "Cari entity ID..."
+                : searchBy === "ipAddress"
+                  ? "Cari IP Address..."
+                  : searchBy === "userAgent"
+                    ? "Cari user agent..."
+                    : "Pilih Search By"
+          }
+        />
+
         <div className={styles.filters}>
-          <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="auditUsername">Username</label>
-            <input
-              id="auditUsername"
-              className={baseStyles.input}
-              placeholder="Cari username..."
-              value={usernameFilter}
-              onChange={(event) => setUsernameFilter(event.target.value)}
-            />
-          </div>
           <div className={baseStyles.formGroup}>
             <label className={baseStyles.label}>Action</label>
             <Dropdown className={baseStyles.select} fullWidth options={ACTION_OPTIONS} value={actionFilter} onChange={setActionFilter} />

@@ -41,6 +41,10 @@ type DeleteTarget =
   | { type: "row"; row: RowItem }
   | { type: "app"; row: RowItem; mappingId: string; appName: string };
 
+type EditTarget = {
+  row: RowItem;
+};
+
 function flattenRows(data: DepartmentApplicationMappingHierarchy[]): RowItem[] {
   const rows: RowItem[] = [];
   data.forEach((bu) => {
@@ -88,6 +92,7 @@ export default function DeptAplikasiPage() {
   const [selectedDivision, setSelectedDivision] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedAppIds, setSelectedAppIds] = useState<string[]>([]);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -187,10 +192,21 @@ export default function DeptAplikasiPage() {
     setSelectedDivision("");
     setSelectedDepartment("");
     setSelectedAppIds([]);
+    setEditTarget(null);
   };
 
   const onOpenAdd = () => {
     resetForm();
+    setShowModal(true);
+  };
+
+  const onOpenEdit = (row: RowItem) => {
+    setEditTarget({ row });
+    setSelectedBu(row.businessUnitId);
+    setSelectedDivision(row.divisionId);
+    setSelectedDepartment(row.departmentId);
+    setSelectedAppIds(row.applications.map((item) => item.applicationId));
+    setError("");
     setShowModal(true);
   };
 
@@ -200,16 +216,54 @@ export default function DeptAplikasiPage() {
       return;
     }
     setSubmitting(true);
-    const result = await createDepartmentApplicationMapping({
-      departmentId: selectedDepartment,
-      applicationIds: selectedAppIds,
-    });
-    setSubmitting(false);
-    if (!result.success) {
-      setError(result.message || "Gagal menyimpan mapping");
+    if (!editTarget) {
+      const result = await createDepartmentApplicationMapping({
+        departmentId: selectedDepartment,
+        applicationIds: selectedAppIds,
+      });
+      setSubmitting(false);
+      if (!result.success) {
+        setError(result.message || "Gagal menyimpan mapping");
+        return;
+      }
+      setShowModal(false);
+      resetForm();
+      setError("");
+      await load();
       return;
     }
+
+    const currentIds = new Set(editTarget.row.applications.map((item) => item.applicationId));
+    const nextIds = new Set(selectedAppIds);
+    const removeMappings = editTarget.row.applications
+      .filter((item) => !nextIds.has(item.applicationId))
+      .map((item) => item.mappingId);
+    const addAppIds = selectedAppIds.filter((id) => !currentIds.has(id));
+
+    for (const mappingId of removeMappings) {
+      const removeResult = await deleteDepartmentApplicationMapping(mappingId);
+      if (!removeResult.success) {
+        setSubmitting(false);
+        setError(removeResult.message || "Gagal memperbarui mapping");
+        return;
+      }
+    }
+
+    if (addAppIds.length > 0) {
+      const addResult = await createDepartmentApplicationMapping({
+        departmentId: selectedDepartment,
+        applicationIds: addAppIds,
+      });
+      if (!addResult.success) {
+        setSubmitting(false);
+        setError(addResult.message || "Gagal memperbarui mapping");
+        return;
+      }
+    }
+
+    setSubmitting(false);
     setShowModal(false);
+    resetForm();
     setError("");
     await load();
   };
@@ -291,7 +345,7 @@ export default function DeptAplikasiPage() {
         </div>
         <div className={styles.toolbar}>
           <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onOpenAdd}>
-            + Tambah Manual
+            Tambah Manual
           </button>
           <button className={styles.btn} type="button" onClick={() => void onExport()}>
             Export
@@ -382,6 +436,9 @@ export default function DeptAplikasiPage() {
                       </td>
                       <td>
                         <div className={styles.btnRow}>
+                          <button className={`${styles.btn} ${styles.btnSecondary} ${styles.btnXs}`} type="button" onClick={() => onOpenEdit(row)}>
+                            Edit
+                          </button>
                           <button className={`${styles.btn} ${styles.btnDanger} ${styles.btnXs}`} type="button" onClick={() => setDeleteTarget({ type: "row", row })}>
                             Delete
                           </button>
@@ -432,11 +489,27 @@ export default function DeptAplikasiPage() {
       </section>
 
       {showModal ? (
-        <div className={styles.modalOverlay} role="presentation" onClick={() => !submitting && setShowModal(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Tambah Mapping Department Aplikasi" onClick={(event) => event.stopPropagation()}>
+        <div
+          className={styles.modalOverlay}
+          role="presentation"
+          onClick={() => {
+            if (submitting) return;
+            setShowModal(false);
+            resetForm();
+          }}
+        >
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editTarget ? "Edit Mapping Department Aplikasi" : "Tambah Mapping Department Aplikasi"} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Tambah Mapping</h2>
-              <button className={styles.btn} type="button" onClick={() => !submitting && setShowModal(false)}>
+              <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
+              <button
+                className={styles.btn}
+                type="button"
+                onClick={() => {
+                  if (submitting) return;
+                  setShowModal(false);
+                  resetForm();
+                }}
+              >
                 Close
               </button>
             </div>
@@ -453,6 +526,7 @@ export default function DeptAplikasiPage() {
                     setSelectedDepartment("");
                   }}
                   placeholder="Pilih Business Unit"
+                  disabled={Boolean(editTarget)}
                 />
               </div>
               <div className={styles.formGroup}>
@@ -466,6 +540,7 @@ export default function DeptAplikasiPage() {
                     setSelectedDepartment("");
                   }}
                   placeholder="Pilih Division"
+                  disabled={Boolean(editTarget)}
                 />
               </div>
               <div className={styles.formGroup}>
@@ -476,6 +551,7 @@ export default function DeptAplikasiPage() {
                   value={selectedDepartment}
                   onChange={setSelectedDepartment}
                   placeholder="Pilih Department"
+                  disabled={Boolean(editTarget)}
                 />
               </div>
               <div className={styles.formGroup}>
@@ -492,11 +568,19 @@ export default function DeptAplikasiPage() {
               </div>
             </div>
             <div className={styles.modalFooter}>
-              <button className={styles.btn} type="button" onClick={() => !submitting && setShowModal(false)}>
+              <button
+                className={styles.btn}
+                type="button"
+                onClick={() => {
+                  if (submitting) return;
+                  setShowModal(false);
+                  resetForm();
+                }}
+              >
                 Cancel
               </button>
               <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={() => void onSave()} disabled={submitting}>
-                {submitting ? "Saving..." : "Save"}
+                {submitting ? "Saving..." : editTarget ? "Update" : "Save"}
               </button>
             </div>
           </div>

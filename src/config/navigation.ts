@@ -70,7 +70,7 @@ export const adminNavigation: NavigationItem[] = [
     href: "/admin/best-comments",
     group: "APPROVAL",
     icon: "bestComments",
-    roles: ["AdminEvent","DepartmentHead"],
+    roles: ["AdminEvent", "DepartmentHead"],
   },
   {
     label: "Master BU",

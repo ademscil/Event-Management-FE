@@ -22,6 +22,8 @@ export type FetchAuditLogsInput = {
   page?: number;
   pageSize?: number;
   username?: string;
+  keyword?: string;
+  searchBy?: "all" | "username" | "entityId" | "ipAddress" | "userAgent";
   action?: string;
   entityType?: string;
   startDate?: string;
@@ -41,6 +43,8 @@ function buildQuery(input: FetchAuditLogsInput): string {
   if (input.page) query.set("page", String(input.page));
   if (input.pageSize) query.set("pageSize", String(input.pageSize));
   if (input.username) query.set("username", input.username);
+  if (input.keyword) query.set("keyword", input.keyword);
+  if (input.searchBy && input.searchBy !== "all") query.set("searchBy", input.searchBy);
   if (input.action && input.action !== "all") query.set("action", input.action);
   if (input.entityType && input.entityType !== "all") query.set("entityType", input.entityType);
   if (input.startDate) query.set("startDate", input.startDate);
