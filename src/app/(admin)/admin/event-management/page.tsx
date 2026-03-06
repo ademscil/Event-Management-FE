@@ -101,6 +101,7 @@ export default function EventManagementPage() {
   const [surveys, setSurveys] = useState<SurveyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
 
   const [currentUser] = useState(() => getCurrentUser());
   const [currentRole] = useState<UserRole | null>(() => currentUser?.role ?? null);
@@ -234,7 +235,10 @@ export default function EventManagementPage() {
 
   const handleCreateDraft = async () => {
     if (!draftName.trim() || selectedAdminEvents.length === 0) {
-      window.alert("Please fill all required fields");
+      setFeedbackDialog({
+        title: "Data Belum Lengkap",
+        message: "Survey Name dan Admin Event Target wajib diisi sebelum membuat event.",
+      });
       return;
     }
 
@@ -249,7 +253,10 @@ export default function EventManagementPage() {
     setSubmitting(false);
 
     if (!createResult.success) {
-      window.alert(createResult.message || "Gagal membuat event");
+      setFeedbackDialog({
+        title: "Gagal Membuat Event",
+        message: createResult.message || "Gagal membuat event",
+      });
       return;
     }
 
@@ -596,6 +603,34 @@ export default function EventManagementPage() {
                   {submitting ? "Creating..." : "Create"}
                 </button>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {feedbackDialog ? (
+        <div className={styles.modalOverlay} onClick={() => setFeedbackDialog(null)} role="presentation">
+          <div
+            className={styles.modalCard}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={feedbackDialog.title}
+          >
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>{feedbackDialog.title}</h2>
+              <button className={styles.modalClose} onClick={() => setFeedbackDialog(null)} type="button" aria-label="Close">
+                x
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <p className={styles.meta} style={{ margin: 0, color: "#475569" }}>
+                {feedbackDialog.message}
+              </p>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={() => setFeedbackDialog(null)}>
+                OK
+              </button>
             </div>
           </div>
         </div>

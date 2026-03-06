@@ -12,6 +12,9 @@ export interface ReportSelectionItem {
   status: string;
   respondentCount: number;
   hasGeneratedReport: boolean;
+  currentPublishCycleId?: string | null;
+  currentCycleNumber?: number | null;
+  generatedAt?: string | null;
 }
 
 export interface GeneratedReport {

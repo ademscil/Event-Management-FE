@@ -26,6 +26,11 @@ function formatDateTime(value?: string | null): string {
   }).format(date);
 }
 
+function toCsvValue(value: string | number | boolean | null | undefined): string {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export default function ApprovalAdminPage() {
   const role: UserRole | null = getCurrentUser()?.role ?? null;
   const canAccess = role === "AdminEvent";
@@ -127,6 +132,34 @@ export default function ApprovalAdminPage() {
     []
   );
 
+  const handleExportRespondents = () => {
+    if (respondents.length === 0) {
+      setError("Belum ada data responden untuk diexport.");
+      return;
+    }
+
+    const headers = ["Respondent", "Department", "Application", "Email", "Submit Time", "Duplicate Status"];
+    const rows = respondents.map((row) => [
+      row.RespondentName || "",
+      row.DepartmentName || "",
+      row.ApplicationName || "",
+      row.RespondentEmail || "",
+      formatDateTime(row.SubmittedAt),
+      row.IsDuplicate ? "Duplicate" : "Unique",
+    ]);
+
+    const csv = [headers, ...rows].map((row) => row.map((cell) => toCsvValue(cell)).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `approval-admin-respondents-${surveyId || "survey"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (!canAccess) {
     return (
       <section className={baseStyles.panel} aria-busy={loading}>
@@ -174,6 +207,13 @@ export default function ApprovalAdminPage() {
       </section>
 
       <section className={baseStyles.panel}>
+        <div className={baseStyles.panelHeader}>
+          <div>
+            <h2 className={baseStyles.panelTitle}>Survey Data Review</h2>
+            <p className={baseStyles.meta}>Review responden dan duplicate check sebelum lanjut ke Approval IT Lead.</p>
+          </div>
+        </div>
+
         <div className={styles.tabs}>
           <button type="button" className={`${styles.tabButton} ${tab === "respondents" ? styles.tabButtonActive : ""}`} onClick={() => setTab("respondents")}>
             Daftar Responden
@@ -202,11 +242,16 @@ export default function ApprovalAdminPage() {
                   value={duplicateFilter}
                   onChange={(value) => setDuplicateFilter(value as "all" | "duplicate" | "unique")}
                 />
+                <button type="button" className={styles.btnSecondary} onClick={handleExportRespondents} disabled={respondents.length === 0}>
+                  Export to CSV
+                </button>
                 <button type="button" className={styles.btnGhost} onClick={() => setSelectedRespondentIds([])} disabled={selectedRespondentIds.length === 0}>
                   Clear Selection
                 </button>
               </div>
             </div>
+
+            {selectedRespondentIds.length > 0 ? <div className={styles.selectionHint}>Selected respondents: {selectedRespondentIds.length}</div> : null}
 
             <div className={baseStyles.tableWrap}>
               <table className={baseStyles.table}>
@@ -336,7 +381,7 @@ export default function ApprovalAdminPage() {
             <header className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>Detail Responden</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail responden">
-                ×
+                x
               </button>
             </header>
             <div className={styles.modalBody}>
@@ -358,3 +403,4 @@ export default function ApprovalAdminPage() {
     </>
   );
 }
+

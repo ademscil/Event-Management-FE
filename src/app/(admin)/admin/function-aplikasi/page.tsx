@@ -17,6 +17,10 @@ type DeleteTarget =
   | { type: "row"; row: FunctionApplicationMappingItem }
   | { type: "app"; row: FunctionApplicationMappingItem; mappingId: string; appName: string };
 
+type EditTarget = {
+  row: FunctionApplicationMappingItem;
+};
+
 export default function FunctionAplikasiPage() {
   const [rows, setRows] = useState<FunctionApplicationMappingItem[]>([]);
   const [functions, setFunctions] = useState<FunctionMaster[]>([]);
@@ -34,6 +38,7 @@ export default function FunctionAplikasiPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedFunctionId, setSelectedFunctionId] = useState("");
   const [selectedAppIds, setSelectedAppIds] = useState<string[]>([]);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -115,20 +120,76 @@ export default function FunctionAplikasiPage() {
       return;
     }
     setSubmitting(true);
-    const result = await createFunctionApplicationMapping({
-      functionId: selectedFunctionId,
-      applicationIds: selectedAppIds,
-    });
-    setSubmitting(false);
-    if (!result.success) {
-      setError(result.message || "Gagal menyimpan mapping");
+    if (!editTarget) {
+      const result = await createFunctionApplicationMapping({
+        functionId: selectedFunctionId,
+        applicationIds: selectedAppIds,
+      });
+      setSubmitting(false);
+      if (!result.success) {
+        setError(result.message || "Gagal menyimpan mapping");
+        return;
+      }
+      setShowModal(false);
+      setSelectedFunctionId("");
+      setSelectedAppIds([]);
+      setEditTarget(null);
+      setError("");
+      await load();
       return;
     }
+
+    const currentIds = new Set(editTarget.row.applications.map((item) => item.applicationId));
+    const nextIds = new Set(selectedAppIds);
+    const removeMappings = editTarget.row.applications
+      .filter((item) => !nextIds.has(item.applicationId))
+      .map((item) => item.mappingId);
+    const addAppIds = selectedAppIds.filter((id) => !currentIds.has(id));
+
+    for (const mappingId of removeMappings) {
+      const removeResult = await deleteFunctionApplicationMapping(mappingId);
+      if (!removeResult.success) {
+        setSubmitting(false);
+        setError(removeResult.message || "Gagal memperbarui mapping");
+        return;
+      }
+    }
+
+    if (addAppIds.length > 0) {
+      const addResult = await createFunctionApplicationMapping({
+        functionId: selectedFunctionId,
+        applicationIds: addAppIds,
+      });
+      if (!addResult.success) {
+        setSubmitting(false);
+        setError(addResult.message || "Gagal memperbarui mapping");
+        return;
+      }
+    }
+
+    setSubmitting(false);
     setShowModal(false);
     setSelectedFunctionId("");
     setSelectedAppIds([]);
+    setEditTarget(null);
     setError("");
     await load();
+  };
+
+  const onOpenAdd = () => {
+    setSelectedFunctionId("");
+    setSelectedAppIds([]);
+    setEditTarget(null);
+    setError("");
+    setShowModal(true);
+  };
+
+  const onOpenEdit = (row: FunctionApplicationMappingItem) => {
+    setEditTarget({ row });
+    setSelectedFunctionId(row.functionId);
+    setSelectedAppIds(row.applications.map((item) => item.applicationId));
+    setError("");
+    setShowModal(true);
   };
 
   const onConfirmDelete = async () => {
@@ -201,8 +262,8 @@ export default function FunctionAplikasiPage() {
           <p className={styles.subtitle}>Atur subset aplikasi per function untuk event aktif.</p>
         </div>
         <div className={styles.toolbar}>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={() => setShowModal(true)}>
-            + Tambah Manual
+          <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onOpenAdd}>
+            Tambah Manual
           </button>
           <button className={styles.btn} type="button" onClick={() => void onExport()}>
             Export
@@ -288,6 +349,9 @@ export default function FunctionAplikasiPage() {
                       </td>
                       <td>
                         <div className={styles.btnRow}>
+                          <button className={`${styles.btn} ${styles.btnSecondary} ${styles.btnXs}`} type="button" onClick={() => onOpenEdit(row)}>
+                            Edit
+                          </button>
                           <button className={`${styles.btn} ${styles.btnDanger} ${styles.btnXs}`} type="button" onClick={() => setDeleteTarget({ type: "row", row })}>
                             Delete
                           </button>
@@ -338,11 +402,31 @@ export default function FunctionAplikasiPage() {
       </section>
 
       {showModal ? (
-        <div className={styles.modalOverlay} role="presentation" onClick={() => !submitting && setShowModal(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Tambah Mapping Function Aplikasi" onClick={(event) => event.stopPropagation()}>
+        <div
+          className={styles.modalOverlay}
+          role="presentation"
+          onClick={() => {
+            if (submitting) return;
+            setShowModal(false);
+            setSelectedFunctionId("");
+            setSelectedAppIds([]);
+            setEditTarget(null);
+          }}
+        >
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editTarget ? "Edit Mapping Function Aplikasi" : "Tambah Mapping Function Aplikasi"} onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Tambah Mapping</h2>
-              <button className={styles.btn} type="button" onClick={() => !submitting && setShowModal(false)}>
+              <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
+              <button
+                className={styles.btn}
+                type="button"
+                onClick={() => {
+                  if (submitting) return;
+                  setShowModal(false);
+                  setSelectedFunctionId("");
+                  setSelectedAppIds([]);
+                  setEditTarget(null);
+                }}
+              >
                 Close
               </button>
             </div>
@@ -355,6 +439,7 @@ export default function FunctionAplikasiPage() {
                   value={selectedFunctionId}
                   onChange={setSelectedFunctionId}
                   placeholder="Pilih Function"
+                  disabled={Boolean(editTarget)}
                 />
               </div>
               <div className={styles.formGroup}>
@@ -371,11 +456,21 @@ export default function FunctionAplikasiPage() {
               </div>
             </div>
             <div className={styles.modalFooter}>
-              <button className={styles.btn} type="button" onClick={() => !submitting && setShowModal(false)}>
+              <button
+                className={styles.btn}
+                type="button"
+                onClick={() => {
+                  if (submitting) return;
+                  setShowModal(false);
+                  setSelectedFunctionId("");
+                  setSelectedAppIds([]);
+                  setEditTarget(null);
+                }}
+              >
                 Cancel
               </button>
               <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={() => void onSave()} disabled={submitting}>
-                {submitting ? "Saving..." : "Save"}
+                {submitting ? "Saving..." : editTarget ? "Update" : "Save"}
               </button>
             </div>
           </div>

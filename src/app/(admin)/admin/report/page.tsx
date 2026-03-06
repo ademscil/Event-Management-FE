@@ -13,7 +13,7 @@ import {
 } from "@/lib/reports";
 import type { UserRole } from "@/types/auth";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import baseStyles from "../page-mockup.module.css";
 import styles from "./report.module.css";
 
@@ -60,6 +60,7 @@ function toScore(value: number | null | undefined): string {
 function mapSelectionStatus(item: ReportSelectionItem): "generated" | "active" | "draft" | "closed" | "archived" | "other" {
   if (item.hasGeneratedReport) return "generated";
   const normalized = String(item.status || "").toLowerCase();
+  if (normalized === "generated") return "generated";
   if (normalized === "active") return "active";
   if (normalized === "draft") return "draft";
   if (normalized === "closed") return "closed";
@@ -72,6 +73,7 @@ function normalizeRole(input: string | null | undefined): string {
 }
 
 export default function ReportSelectionPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedSurveyId = String(searchParams.get("surveyId") || "");
 
@@ -83,7 +85,7 @@ export default function ReportSelectionPage() {
   const isItLead = normalizedRole === "itlead";
   const isDepartmentHead = normalizedRole === "departmenthead";
   const canAccess = isSuperAdmin || isAdminEvent || isItLead || isDepartmentHead;
-  const canGenerateAndExport = isSuperAdmin || isAdminEvent;
+  const canGenerateAndExport = isAdminEvent;
 
   const [surveys, setSurveys] = useState<ReportSelectionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -262,7 +264,13 @@ export default function ReportSelectionPage() {
       return;
     }
 
-    setSurveys((prev) => prev.map((item) => (item.surveyId === survey.surveyId ? { ...item, hasGeneratedReport: true } : item)));
+    setSurveys((prev) =>
+      prev.map((item) =>
+        item.surveyId === survey.surveyId
+          ? { ...item, hasGeneratedReport: true, generatedAt: new Date().toISOString() }
+          : item
+      )
+    );
     setMessage(`Report untuk "${survey.title}" berhasil di-generate.`);
   };
 
@@ -293,6 +301,10 @@ export default function ReportSelectionPage() {
     setMessage(`Export ${format.toUpperCase()} berhasil diproses.`);
   };
 
+  const openReportView = (survey: ReportSelectionItem) => {
+    router.push(`/admin/report/${encodeURIComponent(survey.surveyId)}`);
+  };
+
   if (!canAccess) {
     return (
       <section className={baseStyles.panel}>
@@ -321,13 +333,13 @@ export default function ReportSelectionPage() {
           <span className={styles.searchInlineColon}>:</span>
           <input
             id="surveySearch"
-            className={`${baseStyles.input} ${styles.searchInlineInput}`}
+            className={`${baseStyles.input} ${styles.searchInlineInput} ${styles.searchControl}`}
             placeholder="Nama event atau periode"
             value={surveySearch}
             onChange={(event) => setSurveySearch(event.target.value)}
           />
           <Dropdown
-            className={styles.searchInlineStatus}
+            className={`${styles.searchInlineStatus} ${styles.searchControl}`}
             options={eventStatusOptions}
             value={eventStatusFilter}
             onChange={setEventStatusFilter}
@@ -341,14 +353,14 @@ export default function ReportSelectionPage() {
         </div>
 
         <div className={baseStyles.tableWrap}>
-          <table className={baseStyles.table}>
+          <table className={`${baseStyles.table} ${styles.reportTable}`}>
             <thead>
               <tr>
-                <th scope="col">Nama Event</th>
-                <th scope="col">Periode</th>
-                <th scope="col">Status</th>
-                <th scope="col">Responden</th>
-                <th scope="col">Aksi</th>
+                <th scope="col" className={styles.colEvent}>Nama Event</th>
+                <th scope="col" className={styles.colPeriod}>Periode</th>
+                <th scope="col" className={styles.colStatus}>Status</th>
+                <th scope="col" className={styles.colRespondent}>Responden</th>
+                <th scope="col" className={styles.colAction}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -359,48 +371,57 @@ export default function ReportSelectionPage() {
               ) : (
                 filteredSurveyRows.map((item) => {
                   const mappedStatus = mapSelectionStatus(item);
+                  const hasResponses = Number(item.respondentCount || 0) > 0;
+                  const isGenerated = mappedStatus === "generated";
                   return (
-                    <tr key={item.surveyId}>
-                      <td>{item.title}</td>
-                      <td>{item.period || "-"}</td>
-                      <td>
-                        {mappedStatus === "generated" ? (
+                    <tr key={item.surveyId} className={styles.reportRow}>
+                      <td className={styles.colEvent}>{item.title}</td>
+                      <td className={styles.colPeriod}>{item.period || "-"}</td>
+                      <td className={styles.colStatus}>
+                        {isGenerated ? (
                           <span className={`${baseStyles.badge} ${styles.badgeGenerated}`}>Generated</span>
                         ) : (
                           <span className={styles.statusText}>{item.status}</span>
                         )}
                       </td>
-                      <td>{formatNumber(item.respondentCount)}</td>
-                      <td>
+                      <td className={styles.colRespondent}>{formatNumber(item.respondentCount)}</td>
+                      <td className={styles.actionCell}>
                         <div className={styles.actions}>
                           {!canGenerateAndExport ? (
                             <button
                               type="button"
                               className={styles.buttonSecondaryXs}
-                              onClick={() => {
-                                setSelectedTakeoutSurvey(item.surveyId);
-                                setMessage(`Viewing report "${item.title}".`);
-                              }}
+                              disabled={!hasResponses}
+                              onClick={() => openReportView(item)}
                             >
                               View Report
                             </button>
                           ) : (
                             <>
-                              {item.hasGeneratedReport ? (
-                                <button
-                                  type="button"
-                                  className={styles.buttonSecondaryXs}
-                                  onClick={() => {
-                                    setSelectedTakeoutSurvey(item.surveyId);
-                                    setMessage(`Viewing report "${item.title}".`);
-                                  }}
-                                >
-                                  View Report
-                                </button>
+                              {isGenerated ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.buttonPrimaryXs}
+                                    disabled={!hasResponses}
+                                    onClick={() => setModal({ type: "confirm-generate", survey: item })}
+                                  >
+                                    Regenerate Report
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.buttonSecondaryXs}
+                                    disabled={!hasResponses}
+                                    onClick={() => openReportView(item)}
+                                  >
+                                    View Report
+                                  </button>
+                                </>
                               ) : (
                                 <button
                                   type="button"
                                   className={styles.buttonPrimaryXs}
+                                  disabled={!hasResponses}
                                   onClick={() => setModal({ type: "confirm-generate", survey: item })}
                                 >
                                   Generate Report
@@ -409,6 +430,7 @@ export default function ReportSelectionPage() {
                               <button
                                 type="button"
                                 className={styles.buttonGhostXs}
+                                disabled={!hasResponses}
                                 onClick={() => setModal({ type: "export", survey: item, format: "excel" })}
                               >
                                 Export
@@ -416,6 +438,7 @@ export default function ReportSelectionPage() {
                             </>
                           )}
                         </div>
+                        {!hasResponses ? <span className={styles.actionHint}>Belum ada response</span> : null}
                       </td>
                     </tr>
                   );
@@ -431,7 +454,7 @@ export default function ReportSelectionPage() {
           <h2 className={baseStyles.panelTitle}>Propose Takeout Score Comparison</h2>
           <span className={baseStyles.meta}>Before vs after per question detail (takeout removes score from average).</span>
         </div>
-        <div className={baseStyles.filterGrid}>
+        <div className={`${baseStyles.filterGrid} ${styles.comparisonFilterGrid}`}>
           <div className={baseStyles.formGroup}>
             <label className={baseStyles.label}>Survey</label>
             <Dropdown

@@ -234,6 +234,26 @@ table input[type="checkbox"]:focus-visible {
   font-size: 13px;
 }
 
+.selectionHint,
+.readonlyHint {
+  margin-bottom: 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.selectionHint {
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #1d4ed8;
+}
+
+.readonlyHint {
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #475569;
+}
+
 @media (max-width: 900px) {
   .modalHeader,
   .modalBody,

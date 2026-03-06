@@ -5,7 +5,40 @@ import type { AuthUser, LoginResult } from "@/types/auth";
 const TOKEN_KEY = "csi_token";
 const REFRESH_TOKEN_KEY = "csi_refresh_token";
 const USER_KEY = "csi_user";
+const SESSION_MARKER_KEY = "csi_session_present";
+const COOKIE_SESSION_PLACEHOLDER = "__cookie_session__";
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
+
+function hasStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+}
+
+function getStorage(): Storage | null {
+  if (!hasStorage()) return null;
+  return window.sessionStorage;
+}
+
+function clearLegacyLocalStorage(): void {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+function buildAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const token = hasStorage() && typeof window.localStorage !== "undefined"
+    ? window.localStorage.getItem(TOKEN_KEY)
+    : null;
+
+  if (token) {
+    return {
+      ...extraHeaders,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
+  return extraHeaders;
+}
 
 function parseJsonSafely<T>(value: string | null): T | null {
   if (!value) return null;
@@ -49,6 +82,7 @@ export async function login(
     const response = await fetch(`${API_BASE_PATH}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     });
 
@@ -61,9 +95,12 @@ export async function login(
       };
     }
 
-    localStorage.setItem(TOKEN_KEY, payload.token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, payload.refreshToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
+    if (hasStorage()) {
+      const storage = getStorage();
+      storage?.setItem(USER_KEY, JSON.stringify(payload.user));
+      storage?.setItem(SESSION_MARKER_KEY, "1");
+      clearLegacyLocalStorage();
+    }
 
     return { success: true, user: payload.user as AuthUser };
   } catch {
@@ -75,51 +112,67 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
-  const token = localStorage.getItem(TOKEN_KEY);
-
   try {
-    if (token) {
-      await fetch(`${API_BASE_PATH}/auth/logout`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-    }
+    await fetch(`${API_BASE_PATH}/auth/logout`, {
+      method: "POST",
+      headers: buildAuthHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+    });
   } finally {
     clearSession();
   }
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  const storage = getStorage();
+  storage?.removeItem(USER_KEY);
+  storage?.removeItem(SESSION_MARKER_KEY);
+  clearLegacyLocalStorage();
 }
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+    const legacyToken = localStorage.getItem(TOKEN_KEY);
+    if (legacyToken) return legacyToken;
+  }
+
+  const storage = getStorage();
+  if (!storage) return null;
+
+  const hasSession = storage.getItem(SESSION_MARKER_KEY) === "1" || Boolean(storage.getItem(USER_KEY));
+  return hasSession ? COOKIE_SESSION_PLACEHOLDER : null;
 }
 
 export function getCurrentUser(): AuthUser | null {
-  return parseJsonSafely<AuthUser>(localStorage.getItem(USER_KEY));
+  const storage = getStorage();
+  if (storage) {
+    const sessionUser = parseJsonSafely<AuthUser>(storage.getItem(USER_KEY));
+    if (sessionUser) return sessionUser;
+  }
+
+  if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+    const legacyUser = parseJsonSafely<AuthUser>(localStorage.getItem(USER_KEY));
+    if (legacyUser && storage) {
+      storage.setItem(USER_KEY, JSON.stringify(legacyUser));
+      storage.setItem(SESSION_MARKER_KEY, "1");
+      clearLegacyLocalStorage();
+    }
+    return legacyUser;
+  }
+
+  return null;
 }
 
 export function isAuthenticated(): boolean {
-  return Boolean(getAccessToken());
+  return Boolean(getCurrentUser()) || Boolean(getAccessToken());
 }
 
 export async function validateSession(): Promise<AuthUser | null> {
-  const token = getAccessToken();
-  if (!token) return null;
-
   try {
     const response = await fetch(`${API_BASE_PATH}/auth/validate`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildAuthHeaders(),
+      credentials: "include",
     });
 
     if (!response.ok) {
@@ -133,7 +186,10 @@ export async function validateSession(): Promise<AuthUser | null> {
       return null;
     }
 
-    localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
+    const storage = getStorage();
+    storage?.setItem(USER_KEY, JSON.stringify(payload.user));
+    storage?.setItem(SESSION_MARKER_KEY, "1");
+    clearLegacyLocalStorage();
     return payload.user as AuthUser;
   } catch {
     clearSession();
