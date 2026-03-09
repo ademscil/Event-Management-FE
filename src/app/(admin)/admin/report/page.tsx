@@ -391,7 +391,7 @@ export default function ReportSelectionPage() {
                             <button
                               type="button"
                               className={styles.buttonSecondaryXs}
-                              disabled={!hasResponses}
+                              disabled={!isGenerated}
                               onClick={() => openReportView(item)}
                             >
                               View Report
@@ -430,7 +430,7 @@ export default function ReportSelectionPage() {
                               <button
                                 type="button"
                                 className={styles.buttonGhostXs}
-                                disabled={!hasResponses}
+                                disabled={!isGenerated}
                                 onClick={() => setModal({ type: "export", survey: item, format: "excel" })}
                               >
                                 Export
@@ -438,7 +438,8 @@ export default function ReportSelectionPage() {
                             </>
                           )}
                         </div>
-                        {!hasResponses ? <span className={styles.actionHint}>Belum ada response</span> : null}
+                        {!hasResponses ? <span className={styles.actionHint}>Belum ada response final approved</span> : null}
+                        {hasResponses && !isGenerated ? <span className={styles.actionHint}>Generate report terlebih dahulu</span> : null}
                       </td>
                     </tr>
                   );

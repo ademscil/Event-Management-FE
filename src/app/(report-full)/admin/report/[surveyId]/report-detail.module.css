@@ -93,6 +93,15 @@
   padding: 8px 2px 2px;
 }
 
+.metaStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .innerCaption {
   font-size: 11px;
   margin-bottom: 6px;
@@ -380,9 +389,9 @@
 }
 
 .actionGhost {
-  border: 1px solid #a855f7;
+  border: 1px solid var(--brown);
   background: #fff;
-  color: #7e22ce;
+  color: var(--brown-dark);
 }
 
 .reportErrorTitle {

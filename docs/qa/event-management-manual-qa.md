@@ -9,6 +9,9 @@ Dokumen ini dipakai untuk verifikasi manual terstruktur pada area:
 - Row 27 `Submit Jawaban Responden (API + Validasi)`
 - Row 28 `Blast Email Link di halaman survey management`
 - Row 29 `Blast Reminder di halaman survey management`
+- Row 30 `Menu Laporan Hasil Survey (Filter per Event)`
+- Row 31 `Fungsi Generate Report Survey di menu Report (admin event)`
+- Row 32 `Export Laporan Hasil (Excel/PDF)`
 
 ## Scope Role
 
@@ -305,6 +308,87 @@ Expected:
 - Status efektif tampil `Closed`
 - Event expired tidak menampilkan aksi `Operations`
 
+## Skenario 18: Report Selection Filter
+
+Precondition:
+- Login sebagai role yang punya akses report
+- Minimal ada 1 event dengan report sudah di-generate
+
+Langkah:
+1. Buka halaman `Report`
+2. Isi pencarian nama event
+3. Ubah filter status
+4. Kosongkan pencarian
+
+Expected:
+- List event terfilter sesuai nama dan status
+- `AdminEvent` hanya melihat event sesuai assignment
+- `ITLead` dan `DepartmentHead` hanya readonly
+
+## Skenario 19: Generate Report Action State
+
+Precondition:
+- Login sebagai `AdminEvent`
+- Minimal ada 1 event dengan response final approved
+- Event tersebut belum di-generate
+
+Langkah:
+1. Buka halaman `Report`
+2. Cari event target
+3. Perhatikan tombol aksi sebelum generate
+4. Klik `Generate Report`
+5. Refresh halaman
+
+Expected:
+- Sebelum generate: hanya `Generate Report`
+- Setelah generate dan refresh: muncul `Regenerate Report`, `View Report`, `Export`
+- Event tanpa response final approved tidak bisa generate
+
+## Skenario 20: View Report Full Page
+
+Precondition:
+- Report sudah di-generate
+
+Langkah:
+1. Klik `View Report`
+2. Periksa tampilan halaman detail report
+
+Expected:
+- Halaman tampil full page tanpa sidebar
+- Struktur visual mengikuti mockup report detail
+- Data kosong tetap kosong, tidak ada hardcode palsu
+- Sumber data hanya dari response final approved
+
+## Skenario 21: View Report Tanpa Generate
+
+Precondition:
+- Ada event dengan response final approved tetapi belum di-generate
+
+Langkah:
+1. Akses URL detail report langsung `/admin/report/[surveyId]`
+
+Expected:
+- Halaman tidak melakukan generate otomatis
+- Muncul pesan bahwa report belum di-generate
+- Role readonly tidak memicu perubahan state report
+
+## Skenario 22: Export Report
+
+Precondition:
+- Report sudah di-generate
+
+Langkah:
+1. Klik `Export`
+2. Pilih unduhan Excel
+3. Ulangi untuk PDF
+4. Buka file hasil unduh
+
+Expected:
+- Export hanya tersedia untuk report yang sudah di-generate
+- Nama file unduhan mengikuti judul report/event
+- Konten export sesuai data report final-approved
+- Tidak ada formula injection dari data teks responden
+
 ## Exit Criteria
 
 Area dianggap lolos bila:
@@ -313,4 +397,5 @@ Area dianggap lolos bila:
 - Submit response berjalan untuk skenario email wajib dan non-wajib
 - Blast/reminder dapat dijadwalkan untuk `once` dan `recurring`
 - QR dan generated link usable
+- View/generate/export report mengikuti state generated yang benar
 - Role access tidak bocor
