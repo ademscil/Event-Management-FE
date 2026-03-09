@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { formatEventPeriod, resolveEventStatus } from "@/lib/event-status";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
@@ -8,17 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
-
-function formatPeriod(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const format = new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  return `${format.format(start)} - ${format.format(end)}`;
-}
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
@@ -65,7 +55,7 @@ export default function DashboardPage() {
         return;
       }
       setError("");
-      setSurveys(result.surveys.filter((survey) => survey.Status !== "Draft"));
+      setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
     })();
   }, []);
 
@@ -73,9 +63,11 @@ export default function DashboardPage() {
     const normalizedKeyword = appliedKeyword.trim().toLowerCase();
 
     return surveys.filter((survey) => {
+      const effectiveStatus = resolveEventStatus(survey);
+
       if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
 
-      if (statusFilter !== "all" && survey.Status.toLowerCase() !== statusFilter) return false;
+      if (statusFilter !== "all" && effectiveStatus.toLowerCase() !== statusFilter) return false;
 
       if (!normalizedKeyword) return true;
 
@@ -85,7 +77,7 @@ export default function DashboardPage() {
 
       return (
         survey.Title.toLowerCase().includes(normalizedKeyword) ||
-        survey.Status.toLowerCase().includes(normalizedKeyword)
+        effectiveStatus.toLowerCase().includes(normalizedKeyword)
       );
     });
   }, [surveys, periodStart, periodEnd, statusFilter, appliedKeyword, appliedSearchBy]);
@@ -198,30 +190,34 @@ export default function DashboardPage() {
                     <td colSpan={showReportAction ? 8 : 7}>Tidak ada data survey</td>
                   </tr>
                 ) : (
-                  filteredSurveys.map((survey) => (
-                    <tr key={survey.SurveyId}>
-                      <td>{survey.Title}</td>
-                      <td>{formatPeriod(survey.StartDate, survey.EndDate)}</td>
-                      <td>
-                        <span
-                          className={`${styles.badge} ${
-                            survey.Status === "Active" ? styles.badgeActive : styles.badgeClosed
-                          }`}
-                        >
-                          {survey.Status}
-                        </span>
-                      </td>
-                      <td>{formatNumber(survey.RespondentCount)}</td>
-                      <td>{formatNumber(survey.TargetRespondents)}</td>
-                      <td>{formatScore(survey.CurrentScore)}</td>
-                      <td>{formatScore(survey.TargetScore)}</td>
-                      {showReportAction ? (
+                  filteredSurveys.map((survey) => {
+                    const effectiveStatus = resolveEventStatus(survey);
+
+                    return (
+                      <tr key={survey.SurveyId}>
+                        <td>{survey.Title}</td>
+                        <td>{formatEventPeriod(survey.StartDate, survey.EndDate)}</td>
                         <td>
-                          <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                          <span
+                            className={`${styles.badge} ${
+                              effectiveStatus === "Active" ? styles.badgeActive : styles.badgeClosed
+                            }`}
+                          >
+                            {effectiveStatus}
+                          </span>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))
+                        <td>{formatNumber(survey.RespondentCount)}</td>
+                        <td>{formatNumber(survey.TargetRespondents)}</td>
+                        <td>{formatScore(survey.CurrentScore)}</td>
+                        <td>{formatScore(survey.TargetScore)}</td>
+                        {showReportAction ? (
+                          <td>
+                            <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

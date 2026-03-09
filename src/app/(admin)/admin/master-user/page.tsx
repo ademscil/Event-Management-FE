@@ -75,6 +75,7 @@ export default function MasterUserPage() {
   const [newNpk, setNewNpk] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPhoneNumber, setNewPhoneNumber] = useState("");
   const [newRole, setNewRole] = useState<"SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead">("AdminEvent");
   const [newUseLdap, setNewUseLdap] = useState(true);
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([]);
@@ -290,6 +291,7 @@ export default function MasterUserPage() {
     setNewNpk("");
     setNewDisplayName("");
     setNewEmail("");
+    setNewPhoneNumber("");
     setNewRole("AdminEvent");
     setNewUseLdap(true);
     setNewBusinessUnitId("");
@@ -306,6 +308,7 @@ export default function MasterUserPage() {
     setNewNpk("");
     setNewDisplayName("");
     setNewEmail("");
+    setNewPhoneNumber("");
     setNewRole("AdminEvent");
     setNewUseLdap(true);
     setNewBusinessUnitId("");
@@ -322,6 +325,7 @@ export default function MasterUserPage() {
     setNewNpk(user.NPK || "");
     setNewDisplayName(user.DisplayName || "");
     setNewEmail(user.Email || "");
+    setNewPhoneNumber(user.PhoneNumber || "");
     setNewRole((user.Role as typeof newRole) || "AdminEvent");
     setNewUseLdap(Boolean(user.UseLDAP));
     setNewBusinessUnitId(user.BusinessUnitId || "");
@@ -379,6 +383,7 @@ export default function MasterUserPage() {
         npk: newNpk.trim(),
         displayName: newDisplayName.trim(),
         email: newEmail.trim(),
+        phoneNumber: newPhoneNumber.trim() || undefined,
         role: newRole,
         useLDAP: newUseLdap,
         businessUnitId: newBusinessUnitId,
@@ -403,6 +408,7 @@ export default function MasterUserPage() {
       npk: newNpk.trim(),
       displayName: newDisplayName.trim(),
       email: newEmail.trim(),
+      phoneNumber: newPhoneNumber.trim() || undefined,
       role: newRole,
       businessUnitId: newBusinessUnitId,
       divisionId: newDivisionId,
@@ -551,6 +557,7 @@ export default function MasterUserPage() {
                   <th>NPK</th>
                   <th>Name</th>
                   <th>Email</th>
+                  <th>Phone</th>
                   <th>Role</th>
                   <th>Divisi</th>
                   <th>Department</th>
@@ -561,7 +568,7 @@ export default function MasterUserPage() {
               <tbody>
                 {paginatedUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={8}>Tidak ada data user</td>
+                    <td colSpan={9}>Tidak ada data user</td>
                   </tr>
                 ) : (
                   paginatedUsers.map((user) => (
@@ -569,6 +576,7 @@ export default function MasterUserPage() {
                       <td>{user.NPK || "-"}</td>
                       <td>{user.DisplayName}</td>
                       <td>{user.Email}</td>
+                      <td>{user.PhoneNumber || "-"}</td>
                       <td>{roleLabel(user.Role)}</td>
                       <td>{user.DivisionName || "-"}</td>
                       <td>{user.DepartmentName || "-"}</td>
@@ -714,6 +722,15 @@ export default function MasterUserPage() {
                     type="email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Phone Number</label>
+                  <input
+                    className={styles.input}
+                    placeholder="6281234567890"
+                    value={newPhoneNumber}
+                    onChange={(e) => setNewPhoneNumber(e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>

@@ -8,6 +8,7 @@ import { fetchSurveyById, updateEventById, updateEventConfiguration, fetchSurvey
 import { fetchOrgHierarchy, type BusinessUnitOption, type DivisionOption, type DepartmentOption } from "@/lib/org-hierarchy";
 import { fetchFunctionsMaster, type FunctionMaster } from "@/lib/master-data";
 import { fetchMappedApplicationsByDepartment, fetchMappedApplicationsByFunction } from "@/lib/mappings";
+import { canPublishEvent, resolveEventStatus } from "@/lib/event-status";
 import type { SurveyQuestion } from "@/types/survey";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -90,7 +91,20 @@ interface DraftPayload {
   scheduleEnd: string;
   pages: BuilderPage[];
   savedAt?: string;
-  style: { logo: string; backgroundColor: string; backgroundImage: string; font: FontPreset };
+  style: {
+    logo: string;
+    backgroundColor: string;
+    backgroundImage: string;
+    font: FontPreset;
+    heroTitle: string;
+    heroSubtitle: string;
+    primaryColor: string;
+    secondaryColor: string;
+    buttonStyle: "rounded" | "pill" | "square";
+    showProgressBar: boolean;
+    showPageNumbers: boolean;
+    multiPage: boolean;
+  };
 }
 
 function sanitizeSurveyDescription(value: string): string {
@@ -387,11 +401,31 @@ function getTemplatePreviewStyle(template: BuilderTemplate): CSSProperties {
   };
 }
 
-function toDateInput(value?: string | null): string {
+function toDateTimeInput(value?: string | null): string {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function toIsoDateTime(value?: string): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+function formatScheduleValue(value?: string): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
 }
 
 function mapType(value: string): ElementType {
@@ -786,6 +820,14 @@ export default function SurveyCreatePage() {
   const [bgColor, setBgColor] = useState("#f5f5f5");
   const [bgImage, setBgImage] = useState("");
   const [font, setFont] = useState<FontPreset>("default");
+  const [heroTitle, setHeroTitle] = useState("");
+  const [heroSubtitle, setHeroSubtitle] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#125ba1");
+  const [secondaryColor, setSecondaryColor] = useState("#2c8dd8");
+  const [buttonStyle, setButtonStyle] = useState<"rounded" | "pill" | "square">("rounded");
+  const [showProgressBar, setShowProgressBar] = useState(true);
+  const [showPageNumbers, setShowPageNumbers] = useState(true);
+  const [multiPage, setMultiPage] = useState(true);
 
   const [showSchedule, setShowSchedule] = useState(false);
   const [showStyle, setShowStyle] = useState(false);
@@ -866,11 +908,23 @@ export default function SurveyCreatePage() {
       setSurveyDesc(sanitizeSurveyDescription(detail.Description || ""));
       setTargetRespondents(detail.TargetRespondents != null ? String(detail.TargetRespondents) : "");
       setTargetScore(detail.TargetScore != null ? String(detail.TargetScore) : "");
-      setScheduleStart(toDateInput(detail.StartDate));
-      setScheduleEnd(toDateInput(detail.EndDate));
+      setScheduleStart(toDateTimeInput(detail.StartDate));
+      setScheduleEnd(toDateTimeInput(detail.EndDate));
       setBgColor(detail.configuration?.BackgroundColor || "#f5f5f5");
       setBgImage(detail.configuration?.BackgroundImageUrl || "");
       setLogo(detail.configuration?.LogoUrl || "");
+      setHeroTitle(detail.configuration?.HeroTitle || detail.Title || "");
+      setHeroSubtitle(detail.configuration?.HeroSubtitle || sanitizeSurveyDescription(detail.Description || ""));
+      setPrimaryColor(detail.configuration?.PrimaryColor || "#125ba1");
+      setSecondaryColor(detail.configuration?.SecondaryColor || "#2c8dd8");
+      setButtonStyle(
+        detail.configuration?.ButtonStyle === "pill" || detail.configuration?.ButtonStyle === "square"
+          ? detail.configuration.ButtonStyle
+          : "rounded",
+      );
+      setShowProgressBar(detail.configuration?.ShowProgressBar !== false);
+      setShowPageNumbers(detail.configuration?.ShowPageNumbers !== false);
+      setMultiPage(detail.configuration?.MultiPage !== false);
       const stats = await fetchSurveyResponseStatistics(surveyId);
       setHasSubmittedResponses(stats.success && stats.totalResponses > 0);
 
@@ -890,8 +944,8 @@ export default function SurveyCreatePage() {
             setSurveyDesc(sanitizeSurveyDescription(draft.surveyDesc || detail.Description || ""));
             setTargetRespondents(draft.targetRespondents || "");
             setTargetScore(draft.targetScore || "");
-            setScheduleStart(draft.scheduleStart || toDateInput(detail.StartDate));
-            setScheduleEnd(draft.scheduleEnd || toDateInput(detail.EndDate));
+            setScheduleStart(draft.scheduleStart || toDateTimeInput(detail.StartDate));
+            setScheduleEnd(draft.scheduleEnd || toDateTimeInput(detail.EndDate));
             const draftPages = ensureUniqueElementIds(Array.isArray(draft.pages) ? draft.pages : []);
             setPages(draftPages);
             setElementCounter(getMaxTempElementCounter(draftPages));
@@ -899,6 +953,20 @@ export default function SurveyCreatePage() {
             setBgColor(draft.style?.backgroundColor || "#f5f5f5");
             setBgImage(draft.style?.backgroundImage || "");
             setFont(draft.style?.font || "default");
+            setHeroTitle(draft.style?.heroTitle || detail.configuration?.HeroTitle || detail.Title || "");
+            setHeroSubtitle(draft.style?.heroSubtitle || detail.configuration?.HeroSubtitle || sanitizeSurveyDescription(detail.Description || ""));
+            setPrimaryColor(draft.style?.primaryColor || detail.configuration?.PrimaryColor || "#125ba1");
+            setSecondaryColor(draft.style?.secondaryColor || detail.configuration?.SecondaryColor || "#2c8dd8");
+            setButtonStyle(
+              draft.style?.buttonStyle === "pill" || draft.style?.buttonStyle === "square"
+                ? draft.style.buttonStyle
+                : detail.configuration?.ButtonStyle === "pill" || detail.configuration?.ButtonStyle === "square"
+                  ? detail.configuration.ButtonStyle
+                  : "rounded",
+            );
+            setShowProgressBar(draft.style?.showProgressBar ?? detail.configuration?.ShowProgressBar !== false);
+            setShowPageNumbers(draft.style?.showPageNumbers ?? detail.configuration?.ShowPageNumbers !== false);
+            setMultiPage(draft.style?.multiPage ?? detail.configuration?.MultiPage !== false);
             setMessage("Memuat backup draft lokal yang lebih baru dari server.");
             return;
           }
@@ -957,10 +1025,13 @@ export default function SurveyCreatePage() {
 
   const scheduleSummary = useMemo(() => {
     if (!scheduleStart || !scheduleEnd) return "Period not set";
-    return `Period: ${scheduleStart} - ${scheduleEnd}`;
+    return `Period: ${formatScheduleValue(scheduleStart)} - ${formatScheduleValue(scheduleEnd)}`;
   }, [scheduleEnd, scheduleStart]);
 
-  const styleSummary = useMemo(() => `Logo: ${logo ? "On" : "Off"} | Background: ${bgColor} | Font: ${font === "default" ? "Default" : font}`, [bgColor, font, logo]);
+  const styleSummary = useMemo(
+    () => `Logo: ${logo ? "On" : "Off"} | Primary: ${primaryColor} | Button: ${buttonStyle} | Multi-page: ${multiPage ? "On" : "Off"}`,
+    [buttonStyle, logo, multiPage, primaryColor],
+  );
 
   const allBuilderElements = useMemo(() => pages.flatMap((page) => page.elements), [pages]);
   const profileFieldIds = useMemo(() => {
@@ -1130,7 +1201,7 @@ export default function SurveyCreatePage() {
 
   const validateEventSchedule = (): boolean => {
     if (scheduleStart && scheduleEnd && scheduleStart > scheduleEnd) {
-      setError("Tanggal akhir harus sama atau setelah tanggal mulai");
+      setError("Tanggal dan jam akhir harus sama atau setelah tanggal dan jam mulai");
       return false;
     }
 
@@ -1191,7 +1262,7 @@ export default function SurveyCreatePage() {
       const payload = {
         surveyId,
         type: toApiType(item.element.type),
-        promptText: item.element.title || "Untitled Question",
+        promptText: item.element.title || "",
         subtitle: item.element.subtitle || null,
         imageUrl:
           item.element.type === "hero"
@@ -1366,7 +1437,20 @@ export default function SurveyCreatePage() {
       scheduleEnd,
       pages,
       savedAt: new Date().toISOString(),
-      style: { logo, backgroundColor: bgColor, backgroundImage: bgImage, font },
+      style: {
+        logo,
+        backgroundColor: bgColor,
+        backgroundImage: bgImage,
+        font,
+        heroTitle,
+        heroSubtitle,
+        primaryColor,
+        secondaryColor,
+        buttonStyle,
+        showProgressBar,
+        showPageNumbers,
+        multiPage,
+      },
     };
 
     localStorage.setItem(draftKey, JSON.stringify(payload));
@@ -1390,12 +1474,8 @@ export default function SurveyCreatePage() {
         : undefined,
       targetScore: Number.isFinite(parsedTargetScore) ? parsedTargetScore : undefined,
     };
-    if (scheduleStart) {
-      updatePayload.startDate = new Date(`${scheduleStart}T00:00:00`).toISOString();
-    }
-    if (scheduleEnd) {
-      updatePayload.endDate = new Date(`${scheduleEnd}T00:00:00`).toISOString();
-    }
+    updatePayload.startDate = toIsoDateTime(scheduleStart);
+    updatePayload.endDate = toIsoDateTime(scheduleEnd);
 
     setSaving(true);
     const update = await updateEventById(surveyId, updatePayload);
@@ -1407,10 +1487,18 @@ export default function SurveyCreatePage() {
     }
 
     const configUpdate = await updateEventConfiguration(surveyId, {
+      HeroTitle: heroTitle || surveyTitle || null,
+      HeroSubtitle: heroSubtitle || sanitizeSurveyDescription(surveyDesc) || null,
       LogoUrl: logo || null,
       BackgroundColor: bgColor || null,
       BackgroundImageUrl: bgImage || null,
       FontFamily: font === "default" ? null : font,
+      PrimaryColor: primaryColor || null,
+      SecondaryColor: secondaryColor || null,
+      ButtonStyle: buttonStyle,
+      ShowProgressBar: showProgressBar,
+      ShowPageNumbers: showPageNumbers,
+      MultiPage: multiPage,
     });
     if (!configUpdate.success) {
       setMessage("Draft tersimpan, tetapi style belum tersimpan ke server.");
@@ -1435,6 +1523,11 @@ export default function SurveyCreatePage() {
     setError("");
     setMessage("");
     if (!validateEventSchedule()) {
+      return;
+    }
+
+    if (!canPublishEvent(toIsoDateTime(scheduleEnd))) {
+      setError("Publish tidak dapat dilakukan karena tanggal dan jam akhir event sudah lewat. Status event seharusnya Closed.");
       return;
     }
 
@@ -1465,12 +1558,8 @@ export default function SurveyCreatePage() {
         : undefined,
       targetScore: Number.isFinite(parsedTargetScore) ? parsedTargetScore : undefined,
     };
-    if (scheduleStart) {
-      updatePayload.startDate = new Date(`${scheduleStart}T00:00:00`).toISOString();
-    }
-    if (scheduleEnd) {
-      updatePayload.endDate = new Date(`${scheduleEnd}T00:00:00`).toISOString();
-    }
+    updatePayload.startDate = toIsoDateTime(scheduleStart);
+    updatePayload.endDate = toIsoDateTime(scheduleEnd);
 
     const update = await updateEventById(surveyId, updatePayload);
     setPublishing(false);
@@ -1481,10 +1570,18 @@ export default function SurveyCreatePage() {
     }
 
     const configUpdate = await updateEventConfiguration(surveyId, {
+      HeroTitle: heroTitle || surveyTitle || null,
+      HeroSubtitle: heroSubtitle || sanitizeSurveyDescription(surveyDesc) || null,
       LogoUrl: logo || null,
       BackgroundColor: bgColor || null,
       BackgroundImageUrl: bgImage || null,
       FontFamily: font === "default" ? null : font,
+      PrimaryColor: primaryColor || null,
+      SecondaryColor: secondaryColor || null,
+      ButtonStyle: buttonStyle,
+      ShowProgressBar: showProgressBar,
+      ShowPageNumbers: showPageNumbers,
+      MultiPage: multiPage,
     });
     if (!configUpdate.success) {
       setError(configUpdate.message || "Publish berhasil, namun style belum tersimpan.");
@@ -1496,7 +1593,7 @@ export default function SurveyCreatePage() {
       setError("Publish berhasil, tetapi verifikasi status gagal.");
       return;
     }
-    const latestStatus = verifyActive.survey.Status || "";
+    const latestStatus = resolveEventStatus(verifyActive.survey);
     if (latestStatus !== "Active") {
       setError(`Status belum berubah ke Active (status saat ini: ${latestStatus || "-"})`);
       return;
@@ -1973,7 +2070,12 @@ export default function SurveyCreatePage() {
 
               <div className={styles.brandPreview}>
                 <div className={styles.brandLogo}>{logo ? <img src={logo} alt="Logo" /> : <span>Your Logo</span>}</div>
-                <div><div className={styles.brandLabel}>Style Preview</div><div className={styles.brandText}>{styleSummary}</div></div>
+                <div>
+                  <div className={styles.brandLabel}>{heroTitle || surveyTitle || "Survey Hero Title"}</div>
+                  <div className={styles.brandText}>
+                    {heroSubtitle || sanitizeSurveyDescription(surveyDesc) || styleSummary}
+                  </div>
+                </div>
               </div>
 
               <div className={styles.surveyCard}>
@@ -2429,9 +2531,88 @@ export default function SurveyCreatePage() {
         </div>
       )}
 
-      {showSchedule ? <div className={styles.overlay} onClick={()=>setShowSchedule(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Schedule Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowSchedule(false)}>Close</button></div><div className={styles.modalBody}><label>Start Date<input type="date" value={scheduleStart} onChange={(e)=>setScheduleStart(e.target.value)} /></label><label>End Date<input type="date" value={scheduleEnd} onChange={(e)=>setScheduleEnd(e.target.value)} /></label></div></div></div> : null}
+      {showSchedule ? <div className={styles.overlay} onClick={()=>setShowSchedule(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Schedule Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowSchedule(false)}>Close</button></div><div className={styles.modalBody}><label>Start Date &amp; Time<input type="datetime-local" value={scheduleStart} onChange={(e)=>setScheduleStart(e.target.value)} /></label><label>End Date &amp; Time<input type="datetime-local" value={scheduleEnd} onChange={(e)=>setScheduleEnd(e.target.value)} /></label></div></div></div> : null}
 
-      {showStyle ? <div className={styles.overlay} onClick={()=>setShowStyle(false)}><div className={styles.modal} onClick={(e)=>e.stopPropagation()}><div className={styles.modalHead}><h2>Style Settings</h2><button className={styles.inlineButton} type="button" onClick={()=>setShowStyle(false)}>Close</button></div><div className={styles.modalBody}><label>Your Logo<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setLogo)} /></label><label>Background Color<input type="color" value={bgColor} onChange={(e)=>setBgColor(e.target.value)} /></label><label>Background Image<input type="file" accept="image/*" onChange={(e)=>onFile(e.target.files?.[0],setBgImage)} /></label><label>Font<select value={font} onChange={(e)=>setFont(e.target.value as FontPreset)}><option value="default">Default</option><option value="georgia">Georgia</option><option value="trebuchet">Trebuchet MS</option><option value="verdana">Verdana</option><option value="tahoma">Tahoma</option><option value="courier">Courier New</option></select></label></div></div></div> : null}
+      {showStyle ? (
+        <div className={styles.overlay} onClick={() => setShowStyle(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHead}>
+              <h2>Style Settings</h2>
+              <button className={styles.inlineButton} type="button" onClick={() => setShowStyle(false)}>Close</button>
+            </div>
+            <div className={styles.modalBody}>
+              <label>
+                Hero Title
+                <input value={heroTitle} onChange={(e) => setHeroTitle(e.target.value)} placeholder="Survey hero title" />
+              </label>
+              <label>
+                Hero Subtitle
+                <input value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} placeholder="Survey hero subtitle" />
+              </label>
+              <label>
+                Your Logo
+                <input type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0], setLogo)} />
+              </label>
+              <label>
+                Background Color
+                <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} />
+              </label>
+              <label>
+                Background Image
+                <input type="file" accept="image/*" onChange={(e) => onFile(e.target.files?.[0], setBgImage)} />
+              </label>
+              <label>
+                Primary Color
+                <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+              </label>
+              <label>
+                Secondary Color
+                <input type="color" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} />
+              </label>
+              <label>
+                Font
+                <select value={font} onChange={(e) => setFont(e.target.value as FontPreset)}>
+                  <option value="default">Default</option>
+                  <option value="georgia">Georgia</option>
+                  <option value="trebuchet">Trebuchet MS</option>
+                  <option value="verdana">Verdana</option>
+                  <option value="tahoma">Tahoma</option>
+                  <option value="courier">Courier New</option>
+                </select>
+              </label>
+              <label>
+                Button Style
+                <select value={buttonStyle} onChange={(e) => setButtonStyle(e.target.value as "rounded" | "pill" | "square")}>
+                  <option value="rounded">Rounded</option>
+                  <option value="pill">Pill</option>
+                  <option value="square">Square</option>
+                </select>
+              </label>
+              <label>
+                Show Progress Bar
+                <select value={showProgressBar ? "yes" : "no"} onChange={(e) => setShowProgressBar(e.target.value === "yes")}>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>
+                Show Page Numbers
+                <select value={showPageNumbers ? "yes" : "no"} onChange={(e) => setShowPageNumbers(e.target.value === "yes")}>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>
+                Multi Page
+                <select value={multiPage ? "yes" : "no"} onChange={(e) => setMultiPage(e.target.value === "yes")}>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showTemplatePicker ? (
         <div className={styles.overlay} onClick={() => { setShowTemplatePicker(false); setShowTemplateConfirm(false); }}>

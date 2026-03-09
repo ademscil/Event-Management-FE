@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { getCurrentUser } from "@/lib/auth";
+import { formatEventPeriod, resolveEventStatus } from "@/lib/event-status";
 import { createEventDraft, fetchSurveyOverview } from "@/lib/surveys";
 import { searchAdminEventUsers, type AdminEventUser } from "@/lib/users";
 import type { UserRole } from "@/types/auth";
@@ -12,22 +13,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
-
-function formatPeriod(startDate: string | null, endDate: string | null): string {
-  if (!startDate || !endDate) return "-";
-  
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return "-";
-  
-  const format = new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  return `${format.format(start)} - ${format.format(end)}`;
-}
 
 function formatLastEdited(updatedAt?: string | null, createdAt?: string | null): string {
   const sourceDate = updatedAt || createdAt;
@@ -162,6 +147,8 @@ export default function EventManagementPage() {
 
     return surveys
       .filter((survey) => {
+        const effectiveStatus = resolveEventStatus(survey);
+
         if (currentRole === "AdminEvent" && currentUser?.userId) {
           const currentUserId = String(currentUser.userId);
           const assignedIds = survey.AssignedAdminIds || [];
@@ -171,7 +158,7 @@ export default function EventManagementPage() {
         }
 
         if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
-        if (!matchesStatusFilter(survey.Status, statusFilter)) return false;
+        if (!matchesStatusFilter(effectiveStatus, statusFilter)) return false;
 
         if (!normalizedKeyword) return true;
 
@@ -186,7 +173,7 @@ export default function EventManagementPage() {
         return (
           survey.Title.toLowerCase().includes(normalizedKeyword) ||
           (survey.AssignedAdminName || "").toLowerCase().includes(normalizedKeyword) ||
-          survey.Status.toLowerCase().includes(normalizedKeyword)
+          effectiveStatus.toLowerCase().includes(normalizedKeyword)
         );
       })
       .sort((a, b) => {
@@ -375,48 +362,50 @@ export default function EventManagementPage() {
                     <td colSpan={showContinueDesign ? 6 : 5}>Tidak ada data survey</td>
                   </tr>
                 ) : (
-                  filteredAndSortedSurveys.map((row) => (
-                    <tr key={row.SurveyId}>
-                      <td>{row.Title}</td>
-                      <td>{row.AssignedAdminName || "-"}</td>
-                      <td>{formatPeriod(row.StartDate, row.EndDate)}</td>
-                      <td>
-                        <span className={`${styles.badge} ${getStatusClass(row.Status)}`}>
-                          {getStatusLabel(row.Status)}
-                        </span>
-                      </td>
-                      <td>{formatLastEdited(row.UpdatedAt, row.CreatedAt)}</td>
-                      {showContinueDesign ? (
+                  filteredAndSortedSurveys.map((row) => {
+                    const effectiveStatus = resolveEventStatus(row);
+                    const canContinueDesignAction =
+                      effectiveStatus === "Draft" || effectiveStatus === "In Design" || effectiveStatus === "Active";
+                    const canOpenOperations = effectiveStatus === "Active";
+
+                    return (
+                      <tr key={row.SurveyId}>
+                        <td>{row.Title}</td>
+                        <td>{row.AssignedAdminName || "-"}</td>
+                        <td>{formatEventPeriod(row.StartDate, row.EndDate)}</td>
                         <td>
-                          {row.Status === "Active" || row.Status === "In Design" ? (
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
-                              <Link
-                                href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
-                                className={`${styles.btn} ${styles.btnSecondary}`}
-                              >
-                                Continue Design
-                              </Link>
-                              {row.Status === "Active" ? (
-                                <Link
-                                  href={`/admin/event-management/${row.SurveyId}/operations`}
-                                  className={`${styles.btn} ${styles.btnPrimary}`}
-                                >
-                                  Operations
-                                </Link>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <Link
-                              href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
-                              className={`${styles.btn} ${styles.btnSecondary}`}
-                            >
-                              Continue Design
-                            </Link>
-                          )}
+                          <span className={`${styles.badge} ${getStatusClass(effectiveStatus)}`}>
+                            {getStatusLabel(effectiveStatus)}
+                          </span>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))
+                        <td>{formatLastEdited(row.UpdatedAt, row.CreatedAt)}</td>
+                        {showContinueDesign ? (
+                          <td>
+                            {canContinueDesignAction ? (
+                              <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <Link
+                                  href={`/admin/event-management/survey-create?surveyId=${row.SurveyId}`}
+                                  className={`${styles.btn} ${styles.btnSecondary}`}
+                                >
+                                  Continue Design
+                                </Link>
+                                {canOpenOperations ? (
+                                  <Link
+                                    href={`/admin/event-management/${row.SurveyId}/operations`}
+                                    className={`${styles.btn} ${styles.btnPrimary}`}
+                                  >
+                                    Operations
+                                  </Link>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className={styles.meta}>No action</span>
+                            )}
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

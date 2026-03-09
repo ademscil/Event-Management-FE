@@ -3,10 +3,10 @@
 import { getCurrentUser } from "@/lib/auth";
 import { Dropdown } from "@/components/common/dropdown";
 import {
-  approveTakeout,
+  approveFinalResponses,
   fetchBestCommentsWithFeedback,
   fetchPendingApprovals,
-  rejectTakeout,
+  proposeTakeout,
   submitBestCommentFeedback,
   type BestCommentWithFeedback,
   type PendingApproval,
@@ -48,8 +48,8 @@ export default function ApprovalItLeadPage() {
   const [feedbackRows, setFeedbackRows] = useState<BestCommentWithFeedback[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [feedbackDraft, setFeedbackDraft] = useState<Record<string, string>>({});
-  const [rejectOpen, setRejectOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [proposeOpen, setProposeOpen] = useState(false);
+  const [proposeReason, setProposeReason] = useState("");
 
   const selectedRows = useMemo(
     () => pendingRows.filter((row) => selectedKeys.includes(`${row.ResponseId}-${row.QuestionId}`)),
@@ -138,39 +138,34 @@ export default function ApprovalItLeadPage() {
       setError("Pilih minimal satu data untuk di-approve.");
       return;
     }
-    const result = await Promise.all(
-      selectedRows.map((row) =>
-        approveTakeout({
-          responseId: String(row.ResponseId),
-          questionId: String(row.QuestionId),
-        })
-      )
-    );
-    const err = mapError(result);
-    if (err) {
-      setError(err);
+
+    const responseIds = Array.from(new Set(selectedRows.map((row) => String(row.ResponseId))));
+    const result = await approveFinalResponses({ responseIds });
+    if (!result.success) {
+      setError(result.message);
       return;
     }
+
     setSelectedKeys([]);
-    setMessage("Selected takeout berhasil di-approve.");
+    setMessage("Response terpilih berhasil di-approve final oleh IT Lead.");
     await loadData();
   };
 
-  const handleReject = async () => {
+  const handleProposeTakeout = async () => {
     if (selectedRows.length === 0) {
-      setError("Pilih minimal satu data untuk di-reject.");
+      setError("Pilih minimal satu data untuk di-propose takeout.");
       return;
     }
-    if (!rejectReason.trim()) {
-      setError("Alasan reject wajib diisi.");
+    if (!proposeReason.trim()) {
+      setError("Alasan propose takeout wajib diisi.");
       return;
     }
     const result = await Promise.all(
       selectedRows.map((row) =>
-        rejectTakeout({
+        proposeTakeout({
           responseId: String(row.ResponseId),
           questionId: String(row.QuestionId),
-          reason: rejectReason.trim(),
+          reason: proposeReason.trim(),
         })
       )
     );
@@ -179,10 +174,10 @@ export default function ApprovalItLeadPage() {
       setError(err);
       return;
     }
-    setRejectOpen(false);
-    setRejectReason("");
+    setProposeOpen(false);
+    setProposeReason("");
     setSelectedKeys([]);
-    setMessage("Selected takeout berhasil di-reject.");
+    setMessage("Usulan takeout berhasil dikirim ke Admin Event.");
     await loadData();
   };
 
@@ -222,7 +217,7 @@ export default function ApprovalItLeadPage() {
         </div>
       </div>
 
-      <p className={styles.notice}>Skor aplikasi yang diusulkan takeout akan ditinjau oleh IT Lead sebelum finalisasi report.</p>
+      <p className={styles.notice}>IT Lead melakukan approval final response atau propose takeout sebelum data masuk ke report.</p>
 
       <section className={baseStyles.panel}>
         <h2 className={baseStyles.panelTitle}>Filter</h2>
@@ -270,18 +265,18 @@ export default function ApprovalItLeadPage() {
         {tab === "takeout" ? (
           <>
             <div className={styles.toolbar}>
-              <span className={styles.meta}>Showing {pendingRows.length} pending approvals</span>
+              <span className={styles.meta}>Showing {pendingRows.length} pending IT Lead reviews</span>
               <div className={styles.actions}>
                 <button type="button" className={styles.btnPrimary} onClick={() => void handleApprove()} disabled={selectedRows.length === 0}>
-                  Approve Selected
+                  Approve Final Response
                 </button>
-                <button type="button" className={styles.btnDanger} onClick={() => setRejectOpen(true)} disabled={selectedRows.length === 0}>
-                  Reject Selected
+                <button type="button" className={styles.btnDanger} onClick={() => setProposeOpen(true)} disabled={selectedRows.length === 0}>
+                  Propose Takeout
                 </button>
               </div>
             </div>
 
-            {selectedRows.length > 0 ? <div className={styles.selectionHint}>Selected takeout items: {selectedRows.length}</div> : null}
+            {selectedRows.length > 0 ? <div className={styles.selectionHint}>Selected review items: {selectedRows.length}</div> : null}
 
             <div className={baseStyles.tableWrap}>
               <table className={baseStyles.table}>
@@ -295,9 +290,9 @@ export default function ApprovalItLeadPage() {
                     <th scope="col">Komentar</th>
                     <th scope="col">Alasan Takeout</th>
                     <th scope="col">
-                      <input
-                        aria-label="Pilih semua pending takeout"
-                        type="checkbox"
+                        <input
+                          aria-label="Pilih semua pending review IT Lead"
+                          type="checkbox"
                         checked={selectedKeys.length > 0 && selectedKeys.length === pendingRows.length}
                         onChange={(event) =>
                           setSelectedKeys(event.target.checked ? pendingRows.map((row) => `${row.ResponseId}-${row.QuestionId}`) : [])
@@ -309,7 +304,7 @@ export default function ApprovalItLeadPage() {
                 <tbody>
                   {pendingRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className={styles.empty}>Tidak ada pending takeout untuk filter ini.</td>
+                      <td colSpan={8} className={styles.empty}>Tidak ada response pending review IT Lead untuk filter ini.</td>
                     </tr>
                   ) : (
                     pendingRows.map((row) => {
@@ -399,12 +394,12 @@ export default function ApprovalItLeadPage() {
         )}
       </section>
 
-      {rejectOpen ? (
-        <div className={styles.modalOverlay} onClick={() => setRejectOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject takeout" onClick={(event) => event.stopPropagation()}>
+      {proposeOpen ? (
+        <div className={styles.modalOverlay} onClick={() => setProposeOpen(false)}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Propose takeout" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Reject Selected Takeout</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)} aria-label="Tutup modal reject takeout">
+              <h2 className={styles.modalTitle}>Propose Takeout</h2>
+              <button type="button" className={styles.closeBtn} onClick={() => setProposeOpen(false)} aria-label="Tutup modal propose takeout">
                 x
               </button>
             </header>
@@ -413,17 +408,17 @@ export default function ApprovalItLeadPage() {
               <textarea
                 className={styles.textarea}
                 rows={4}
-                placeholder="Alasan reject wajib diisi"
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder="Alasan propose takeout wajib diisi"
+                value={proposeReason}
+                onChange={(event) => setProposeReason(event.target.value)}
               />
             </div>
             <footer className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setRejectOpen(false)}>
+              <button type="button" className={styles.btnSecondary} onClick={() => setProposeOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className={styles.btnDanger} onClick={() => void handleReject()}>
-                Reject
+              <button type="button" className={styles.btnDanger} onClick={() => void handleProposeTakeout()}>
+                Submit Proposal
               </button>
             </footer>
           </div>

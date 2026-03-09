@@ -5,11 +5,12 @@ export type UserRole =
   | "DepartmentHead";
 
 export interface AuthUser {
-  userId: number;
+  userId: string;
   username: string;
   displayName: string;
+  email?: string;
   role: UserRole;
-  isActive: boolean;
+  isActive?: boolean;
 }
 
 export interface LoginResult {

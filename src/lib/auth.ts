@@ -111,6 +111,70 @@ export async function login(
   }
 }
 
+export async function requestPasswordReset(
+  method: "email" | "phone",
+  identifier: string,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_PATH}/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ method, identifier }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      return {
+        success: false,
+        message: getErrorMessage(payload, "Gagal memproses forgot password"),
+      };
+    }
+
+    return {
+      success: true,
+      message: typeof payload?.message === "string" ? payload.message : "Permintaan reset password berhasil diproses",
+    };
+  } catch {
+    return {
+      success: false,
+      message: "Gagal terhubung ke server",
+    };
+  }
+}
+
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_PATH}/auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token, password }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      return {
+        success: false,
+        message: getErrorMessage(payload, "Gagal mereset password"),
+      };
+    }
+
+    return {
+      success: true,
+      message: typeof payload?.message === "string" ? payload.message : "Password berhasil direset",
+    };
+  } catch {
+    return {
+      success: false,
+      message: "Gagal terhubung ke server",
+    };
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await fetch(`${API_BASE_PATH}/auth/logout`, {
