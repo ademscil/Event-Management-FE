@@ -3,7 +3,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import {
   fetchReportSelectionList,
-  generateSurveyReport,
+  fetchSurveyReport,
   type GeneratedReport,
   type ReportSelectionItem,
 } from "@/lib/reports";
@@ -76,6 +76,18 @@ function safeLabel(input: string | null | undefined, fallback = "-"): string {
   return value || fallback;
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function subscribeToClientReady(callback: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   window.addEventListener("load", callback);
@@ -118,15 +130,20 @@ export default function ReportDetailPage() {
       }
       setLoading(true);
       setError("");
-      const [selectionResult, reportResult] = await Promise.all([
-        fetchReportSelectionList(),
-        generateSurveyReport({ surveyId, includeTakenOut: false }),
-      ]);
+      const selectionResult = await fetchReportSelectionList();
 
       if (selectionResult.success) {
         const currentSurvey = selectionResult.surveys.find((item) => item.surveyId === surveyId) || null;
         setSurveyItem(currentSurvey);
+        if (currentSurvey && !currentSurvey.hasGeneratedReport) {
+          setReport(null);
+          setError("Report belum digenerate untuk event ini.");
+          setLoading(false);
+          return;
+        }
       }
+
+      const reportResult = await fetchSurveyReport({ surveyId, includeTakenOut: false });
 
       if (!reportResult.success || !reportResult.report) {
         setReport(null);
@@ -201,7 +218,7 @@ export default function ReportDetailPage() {
   const functionScores = useMemo(() => {
     const map = new Map<string, number[]>();
     numericRows.forEach((row) => {
-      const key = safeLabel(row.ApplicationName, "General");
+      const key = safeLabel(row.FunctionName || row.ApplicationName, "General");
       if (!map.has(key)) map.set(key, []);
       const values = map.get(key);
       if (values) values.push(row.score);
@@ -275,7 +292,7 @@ export default function ReportDetailPage() {
     const buffer = new Map<string, number[]>();
 
     numericRows.forEach((row) => {
-      const functionName = safeLabel(row.ApplicationName, "General");
+      const functionName = safeLabel(row.FunctionName || row.ApplicationName, "General");
       const detail = safeLabel(row.PromptText, "Question");
       const score = row.score;
       if (!grouped.has(functionName)) grouped.set(functionName, { entries: [], avg: 0 });
@@ -411,6 +428,11 @@ export default function ReportDetailPage() {
                     <span className={`${styles.targetBadge} ${styles.scoreBadge}`}>Score</span>
                   </div>
                   <div className={styles.innerBlock}>
+                    <div className={styles.metaStrip}>
+                      <span>Periode: {safeLabel(surveyItem?.period)}</span>
+                      <span>Generated: {formatDateTime(surveyItem?.generatedAt) || "-"}</span>
+                      <span>Source: Final Approved Response</span>
+                    </div>
                     <table className={styles.table}>
                       <thead>
                         <tr>

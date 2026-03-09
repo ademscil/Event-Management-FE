@@ -44,6 +44,7 @@ export interface GeneratedReport {
     BusinessUnitName: string;
     DivisionName: string;
     DepartmentName: string;
+    FunctionName?: string | null;
     ApplicationName: string;
     PromptText: string;
     QuestionType: string;
@@ -76,6 +77,21 @@ function extractError(payload: unknown, fallback: string): string {
   const data = payload as Record<string, unknown>;
   if (typeof data.message === "string" && data.message.trim()) return data.message;
   if (typeof data.error === "string" && data.error.trim()) return data.error;
+  return fallback;
+}
+
+function parseFilenameFromDisposition(headerValue: string | null, fallback: string): string {
+  const input = String(headerValue || "");
+  const utf8Match = input.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const basicMatch = input.match(/filename="?([^";]+)"?/i);
+  if (basicMatch?.[1]) return basicMatch[1];
   return fallback;
 }
 
@@ -149,6 +165,48 @@ export async function generateSurveyReport(input: {
   }
 }
 
+export async function fetchSurveyReport(input: {
+  surveyId: string;
+  includeTakenOut?: boolean;
+  businessUnitId?: string;
+  divisionId?: string;
+  departmentId?: string;
+  functionId?: string;
+  applicationId?: string;
+}): Promise<{ success: boolean; report?: GeneratedReport; message?: string }> {
+  const token = getAccessToken();
+  const user = getCurrentUser();
+  if (!token || !user) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/reports/view`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...input,
+        includeTakenOut: input.includeTakenOut ?? false,
+        userId: String(user.userId),
+        userRole: user.role,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; report?: GeneratedReport; message?: string; error?: string }
+      | null;
+
+    if (!response.ok || payload?.success !== true || !payload.report) {
+      return { success: false, message: extractError(payload, "Gagal memuat report") };
+    }
+
+    return { success: true, report: payload.report };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
 export async function fetchTakeoutComparison(input: {
   surveyId: string;
   functionId?: string;
@@ -209,7 +267,8 @@ export async function exportSurveyReport(input: {
     }
 
     const blob = await response.blob();
-    const filename = input.format === "excel" ? "report.xlsx" : "report.pdf";
+    const fallbackFilename = input.format === "excel" ? "report.xlsx" : "report.pdf";
+    const filename = parseFilenameFromDisposition(response.headers.get("Content-Disposition"), fallbackFilename);
     return { success: true, blob, filename };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };
