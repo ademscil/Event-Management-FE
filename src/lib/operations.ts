@@ -68,7 +68,7 @@ export async function getScheduledOperations(surveyId: string): Promise<{ succes
       frequency: String(item.frequency || item.Frequency || ""),
       scheduledDate: (item.scheduledDate || item.ScheduledDate || null) as string | null,
       scheduledTime: (item.scheduledTime || item.ScheduledTime || null) as string | null,
-      dayOfWeek: (item.dayOfWeek || item.DayOfWeek || null) as number | null,
+      dayOfWeek: (item.dayOfWeek ?? item.DayOfWeek ?? null) as number | null,
       status: String(item.status || item.Status || ""),
     }));
     return { success: true, operations: normalized };
