@@ -96,8 +96,8 @@ export default function OperationsPage() {
     recipients: string[];
     dayOfWeek?: DayOfWeekValue;
   }): string | null => {
-    if (!input.date || !input.time || !input.subject.trim() || !input.messageText.trim()) {
-      return "Tanggal, waktu, subject, dan message wajib diisi";
+    if (!input.date || !input.time) {
+      return "Tanggal dan waktu wajib diisi";
     }
 
     if (input.frequency === "weekly" && (input.dayOfWeek === undefined || input.dayOfWeek === null)) {
