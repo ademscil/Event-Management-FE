@@ -17,6 +17,7 @@ export type ApprovalRespondent = {
   DepartmentId: string;
   DepartmentName: string;
   SubmittedAt: string;
+  ResponseApprovalStatus?: string;
   DuplicateCount: number;
   IsDuplicate: boolean;
 };
@@ -60,6 +61,7 @@ export type PendingApproval = {
   FunctionId?: string | null;
   FunctionName?: string | null;
   ProposedByName?: string | null;
+  SubmittedAt?: string | null;
 };
 
 export type ApprovalComment = {
@@ -195,6 +197,20 @@ export async function fetchApprovalRespondents(input: {
   return { success: true, data: result.data.respondents || [] };
 }
 
+export async function approveInitialResponses(input: {
+  responseIds: string[];
+  reason?: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/approve", "POST", input, "Gagal approve response awal");
+}
+
+export async function rejectInitialResponses(input: {
+  responseIds: string[];
+  reason: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/reject", "POST", input, "Gagal reject response awal");
+}
+
 export async function fetchProposedTakeouts(input: {
   surveyId?: string;
   functionId?: string;
@@ -315,6 +331,21 @@ export async function rejectTakeout(input: {
   reason: string;
 }): Promise<ApiResult<Record<string, unknown>>> {
   return mutateJson("/approvals/reject", "POST", input, "Gagal reject takeout");
+}
+
+export async function proposeTakeout(input: {
+  responseId: string;
+  questionId: string;
+  reason: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/propose-takeout", "POST", input, "Gagal propose takeout");
+}
+
+export async function approveFinalResponses(input: {
+  responseIds: string[];
+  reason?: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/final-approve", "POST", input, "Gagal approve final response");
 }
 
 export async function submitBestCommentFeedback(input: {

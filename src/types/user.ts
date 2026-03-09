@@ -4,6 +4,7 @@ export interface UserListItem {
   NPK?: string | null;
   DisplayName: string;
   Email: string;
+  PhoneNumber?: string | null;
   Role: "SuperAdmin" | "AdminEvent" | "ITLead" | "DepartmentHead" | string;
   UseLDAP: boolean;
   IsActive: boolean;

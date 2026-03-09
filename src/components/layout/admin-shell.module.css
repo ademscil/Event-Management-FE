@@ -85,6 +85,7 @@
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   padding: 16px 0;
+  animation: slideInSidebar 260ms ease-out;
 }
 
 .menu {
@@ -226,4 +227,27 @@
   padding: 24px;
   background: #f3f4f6;
   overflow-x: hidden;
+  animation: fadeInContent 320ms ease-out;
+}
+
+@keyframes slideInSidebar {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInContent {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

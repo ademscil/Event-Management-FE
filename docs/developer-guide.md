@@ -32,6 +32,29 @@ Scope dokumen mencakup:
 3. ITLead
 4. DepartmentHead
 
+### 1.4 Business Rules Terkonfirmasi
+
+1. Domain utama aplikasi adalah `Event Management`.
+2. `Survey` diperlakukan sebagai salah satu `event type`.
+3. Satu aplikasi hanya boleh dimiliki oleh satu function.
+4. Satu function dapat memiliki banyak aplikasi.
+5. `Function` memiliki `DeptId` sebagai owner department.
+6. Approval IT Lead ditentukan berdasarkan function pemilik aplikasi.
+7. `DepartmentHead` bersifat view-only untuk monitoring dan review.
+8. Flow approval survey final:
+   - responden submit
+   - `AdminEvent` approve/reject response awal
+   - yang approved masuk ke `ITLead`
+   - `ITLead` approve atau propose takeout
+   - hasil propose takeout kembali ke `AdminEvent` untuk approve/reject
+   - setelah keputusan final, data response masuk ke report
+   - `AdminEvent` memilih best comment
+   - `ITLead` memberi feedback untuk best comment
+9. Response yang direject pada tahap awal oleh `AdminEvent` tidak lanjut ke proses berikutnya, tetapi tetap tersimpan untuk histori.
+10. `Continue Design + Save Draft` harus mengubah status event survey menjadi `Draft`.
+11. `Publish` hanya boleh menghasilkan status `Active` bila `EndDateTime` belum lewat.
+12. Periode event survey harus mendukung `datetime`, bukan date-only, agar use case event beberapa jam tetap tertangani.
+
 ## 2. Prasyarat Local Development
 
 1. Node.js 20+ (disarankan versi stabil yang sama di FE/BE)

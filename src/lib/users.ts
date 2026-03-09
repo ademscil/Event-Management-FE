@@ -21,6 +21,7 @@ export type CreateUserInput = {
   npk?: string;
   displayName: string;
   email: string;
+  phoneNumber?: string;
   role: UserRole;
   useLDAP: boolean;
   businessUnitId: string;
@@ -34,6 +35,7 @@ export type UpdateUserInput = {
   npk?: string;
   displayName?: string;
   email?: string;
+  phoneNumber?: string;
   role?: UserRole;
   businessUnitId?: string;
   divisionId?: string;

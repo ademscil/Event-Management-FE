@@ -4,6 +4,7 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+  animation: riseIn 220ms ease-out;
 }
 
 .title {
@@ -25,6 +26,7 @@
   border-radius: 10px;
   padding: 20px;
   margin-bottom: 20px;
+  animation: riseIn 260ms ease-out;
 }
 
 .panelTitle {
@@ -39,6 +41,17 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .meta {
