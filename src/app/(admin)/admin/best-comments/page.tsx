@@ -13,7 +13,7 @@ import {
 import { fetchFunctionsMaster } from "@/lib/master-data";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import baseStyles from "../page-mockup.module.css";
 import styles from "../approval.module.css";
 
@@ -77,7 +77,7 @@ export default function BestCommentsPage() {
     void run();
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const selectedSurvey = surveyId === "all" ? undefined : surveyId;
     const selectedFunction = functionId === "all" ? undefined : functionId;
     try {
@@ -104,14 +104,13 @@ export default function BestCommentsPage() {
       setComments([]);
       setBestRows([]);
     }
-  };
+  }, [surveyId, functionId]);
 
   useEffect(() => {
     setError("");
     setMessage("");
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId, functionId]);
+  }, [loadData]);
 
   const selectedRows = useMemo(
     () => comments.filter((row) => selectedKeys.includes(`${row.ResponseId}-${row.QuestionId}`)),

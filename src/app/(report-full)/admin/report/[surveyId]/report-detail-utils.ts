@@ -41,7 +41,16 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 export function subscribeToClientReady(callback: () => void): () => void {
+  // Use a no-op since we handle client-ready via useEffect in the component.
+  // The window "load" event may already have fired by the time this is called
+  // in Next.js App Router, making it unreliable. Components should use
+  // useEffect with an isMounted flag instead.
   if (typeof window === "undefined") return () => {};
+  // If document is already complete, fire immediately via microtask
+  if (document.readyState === "complete") {
+    const id = setTimeout(callback, 0);
+    return () => clearTimeout(id);
+  }
   window.addEventListener("load", callback);
   return () => window.removeEventListener("load", callback);
 }

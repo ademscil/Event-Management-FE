@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -10,7 +10,7 @@ type ApiResult<T> =
 
 export type BusinessUnitMaster = {
   BusinessUnitId: string;
-  Code: string;
+  Code: number;
   Name: string;
   IsActive: boolean;
 };
@@ -79,6 +79,11 @@ async function authFetch<T>(
     });
 
     const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok) {
       return { success: false, message: getErrorMessage(payload, fallbackMessage) };
     }
@@ -98,7 +103,7 @@ export async function fetchBusinessUnitsMaster(): Promise<ApiResult<BusinessUnit
   );
 }
 
-export async function createBusinessUnitMaster(input: { code: string; name: string }): Promise<ApiResult<BusinessUnitMaster>> {
+export async function createBusinessUnitMaster(input: { name: string }): Promise<ApiResult<BusinessUnitMaster>> {
   return authFetch(
     "/business-units",
     { method: "POST", body: JSON.stringify(input) },
@@ -107,7 +112,7 @@ export async function createBusinessUnitMaster(input: { code: string; name: stri
   );
 }
 
-export async function updateBusinessUnitMaster(id: string, input: Partial<{ code: string; name: string; isActive: boolean }>): Promise<ApiResult<BusinessUnitMaster>> {
+export async function updateBusinessUnitMaster(id: string, input: Partial<{ name: string; isActive: boolean }>): Promise<ApiResult<BusinessUnitMaster>> {
   return authFetch(
     `/business-units/${id}`,
     { method: "PUT", body: JSON.stringify(input) },
@@ -222,4 +227,160 @@ export async function updateApplicationMaster(id: string, input: Partial<{ code:
     "Gagal memperbarui aplikasi",
     (payload) => (payload as { application: ApplicationMaster }).application
   );
+}
+
+export async function downloadBusinessUnitTemplate(): Promise<{ success: boolean; blob?: Blob; filename?: string; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+  try {
+    const response = await fetch(`${API_BASE_PATH}/business-units/template`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      return { success: false, message: payload?.message || "Gagal download template" };
+    }
+    const blob = await response.blob();
+    return { success: true, blob, filename: "master-bu-template.xlsx" };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function uploadBusinessUnitFile(file: File): Promise<{
+  success: boolean;
+  message?: string;
+  imported?: number;
+  updated?: number;
+  failed?: number;
+  errors?: Array<{ row: number; data: unknown; errors: string[] }>;
+}> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_PATH}/business-units/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      message?: string;
+      imported?: number;
+      updated?: number;
+      failed?: number;
+      errors?: Array<{ row: number; data: unknown; errors: string[] }>;
+    } | null;
+    if (!response.ok || !payload?.success) {
+      return { success: false, message: payload?.message || "Gagal upload file", errors: payload?.errors };
+    }
+    return {
+      success: true,
+      message: payload.message,
+      imported: payload.imported,
+      updated: payload.updated,
+      failed: payload.failed,
+      errors: payload.errors,
+    };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+type UploadResult = {
+  success: boolean;
+  message?: string;
+  imported?: number;
+  updated?: number;
+  failed?: number;
+  errors?: Array<{ row: number; data: unknown; errors: string[] }>;
+};
+
+async function downloadTemplate(endpoint: string, filename: string): Promise<{ success: boolean; blob?: Blob; filename?: string; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+  try {
+    const response = await fetch(`${API_BASE_PATH}${endpoint}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      return { success: false, message: payload?.message || "Gagal download template" };
+    }
+    const blob = await response.blob();
+    return { success: true, blob, filename };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+async function uploadFile(endpoint: string, file: File): Promise<UploadResult> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_PATH}${endpoint}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      message?: string;
+      imported?: number;
+      updated?: number;
+      failed?: number;
+      errors?: Array<{ row: number; data: unknown; errors: string[] }>;
+    } | null;
+    if (!response.ok || !payload?.success) {
+      return { success: false, message: payload?.message || "Gagal upload file", errors: payload?.errors };
+    }
+    return {
+      success: true,
+      message: payload.message,
+      imported: payload.imported,
+      updated: payload.updated,
+      failed: payload.failed,
+      errors: payload.errors,
+    };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+// Division template & upload
+export async function downloadDivisionTemplate() {
+  return downloadTemplate("/divisions/template", "master-divisi-template.xlsx");
+}
+export async function uploadDivisionFile(file: File): Promise<UploadResult> {
+  return uploadFile("/divisions/upload", file);
+}
+
+// Department template & upload
+export async function downloadDepartmentTemplate() {
+  return downloadTemplate("/departments/template", "master-department-template.xlsx");
+}
+export async function uploadDepartmentFile(file: File): Promise<UploadResult> {
+  return uploadFile("/departments/upload", file);
+}
+
+// Function template & upload
+export async function downloadFunctionTemplate() {
+  return downloadTemplate("/functions/template", "master-function-template.xlsx");
+}
+export async function uploadFunctionFile(file: File): Promise<UploadResult> {
+  return uploadFile("/functions/upload", file);
+}
+
+// Application template & upload
+export async function downloadApplicationTemplate() {
+  return downloadTemplate("/applications/template", "master-aplikasi-template.xlsx");
+}
+export async function uploadApplicationFile(file: File): Promise<UploadResult> {
+  return uploadFile("/applications/upload", file);
 }

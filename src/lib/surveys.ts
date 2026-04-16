@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 import type { SurveyConfiguration, SurveyDetail, SurveyOverviewItem, SurveyQuestion } from "@/types/survey";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
@@ -46,10 +46,14 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 async function requestJson(
   path: string,
   init: RequestInit,
-): Promise<{ ok: boolean; payload: Record<string, unknown> | null }> {
+): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> | null }> {
   const response = await fetch(path, init);
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-  return { ok: response.ok, payload };
+  if (response.status === 401) {
+    clearSession();
+    if (typeof window !== "undefined") window.location.href = "/admin/login";
+  }
+  return { ok: response.ok, status: response.status, payload };
 }
 
 function toSchedulePayload(input: ScheduleRequest) {

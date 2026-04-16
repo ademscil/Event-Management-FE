@@ -183,6 +183,7 @@ export default function ApprovalAdminPage() {
   };
 
   const reloadRespondents = async () => {
+    setError("");
     const respondentRes = await fetchApprovalRespondents({ surveyId, duplicateFilter });
     if (!respondentRes.success) {
       setError(respondentRes.message);
@@ -192,6 +193,7 @@ export default function ApprovalAdminPage() {
   };
 
   const reloadTakeouts = async () => {
+    setError("");
     const takeoutRes = await fetchProposedTakeouts({ surveyId, functionId: functionId === "all" ? undefined : functionId });
     if (!takeoutRes.success) {
       setError(takeoutRes.message);

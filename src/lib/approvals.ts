@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -133,6 +133,11 @@ async function getJson<T>(endpoint: string, fallbackMessage: string): Promise<Ap
       cache: "no-store",
     });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: extractError(payload, fallbackMessage) };
     }
@@ -158,6 +163,11 @@ async function mutateJson(
       body: JSON.stringify(body),
     });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: extractError(payload, fallbackMessage) };
     }

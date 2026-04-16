@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -76,6 +76,11 @@ async function fetchMappedApplications(
       | { success?: boolean; applications?: MappedApplicationOption[]; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, applications: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || payload?.success !== true) {
       return {
         success: false,
@@ -126,6 +131,11 @@ async function authJson<T>(
     });
 
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok) {
       return { success: false, message: getErrorMessage(payload, fallbackMessage) };
     }

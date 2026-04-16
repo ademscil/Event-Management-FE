@@ -279,7 +279,13 @@ export default function ReportSelectionPage() {
       return;
     }
     const refreshed = await loadSurveyList();
-    const updated = refreshed.find((item) => item.surveyId === survey.surveyId);
+    let updated = refreshed.find((item) => item.surveyId === survey.surveyId);
+    if (!updated?.hasGeneratedReport) {
+      // Retry once after 1.5s — BE may need a moment to persist the flag
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const retried = await loadSurveyList();
+      updated = retried.find((item) => item.surveyId === survey.surveyId);
+    }
     if (!updated?.hasGeneratedReport) {
       setError("Generate report belum tersimpan penuh di backend. Coba refresh atau regenerate sekali lagi setelah backend aktif terbaru.");
       return;

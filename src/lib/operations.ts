@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 const EVENTS_ENDPOINT = `${API_BASE_PATH}/events`;
@@ -30,6 +30,11 @@ export async function generateQRCode(surveyId: string): Promise<{ success: boole
     });
 
     const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: payload?.message || "Gagal generate QR code" };
     }
@@ -57,6 +62,11 @@ export async function getScheduledOperations(surveyId: string): Promise<{ succes
     });
 
     const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: payload?.message || "Gagal memuat scheduled operations" };
     }
@@ -88,6 +98,11 @@ export async function cancelScheduledOperation(_surveyId: string, operationId: s
     });
 
     const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: payload?.message || "Gagal cancel operation" };
     }

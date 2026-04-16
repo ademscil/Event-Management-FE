@@ -263,13 +263,13 @@ export default function AuditTrailPage() {
           <table className={baseStyles.table}>
             <thead>
               <tr>
-                <th>Waktu</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Entity</th>
-                <th>IP Address</th>
-                <th>User Agent</th>
-                <th>Detail</th>
+                <th scope="col">Waktu</th>
+                <th scope="col">User</th>
+                <th scope="col">Action</th>
+                <th scope="col">Entity</th>
+                <th scope="col">IP Address</th>
+                <th scope="col">User Agent</th>
+                <th scope="col">Detail</th>
               </tr>
             </thead>
             <tbody>
@@ -287,7 +287,7 @@ export default function AuditTrailPage() {
                     <td>{item.IPAddress || "-"}</td>
                     <td className={!item.UserAgent ? styles.mutedCell : undefined}>{item.UserAgent || "-"}</td>
                     <td>
-                      <button type="button" className={styles.btnInline} onClick={() => setModal({ type: "detail", item })}>View</button>
+                      <button type="button" className={styles.btnInline} aria-label={`Lihat detail log ${item.Action} oleh ${item.Username || "-"}`} onClick={() => setModal({ type: "detail", item })}>View</button>
                     </td>
                   </tr>
                 ))
@@ -311,10 +311,16 @@ export default function AuditTrailPage() {
 
       {modal.type === "detail" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Detail audit log"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className={styles.modalHeader}>
               <h3 className={styles.modalTitle}>Detail Audit Log</h3>
-              <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })}>x</button>
+              <button type="button" className={styles.modalClose} aria-label="Tutup modal detail audit log" onClick={() => setModal({ type: "none" })}>x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.modalGrid}>

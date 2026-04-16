@@ -10,10 +10,12 @@ import { Dropdown } from "@/components/common/dropdown";
 import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import {
   createDepartmentMaster,
+  downloadDepartmentTemplate,
   fetchBusinessUnitsMaster,
   fetchDepartmentsMaster,
   fetchDivisionsMaster,
   updateDepartmentMaster,
+  uploadDepartmentFile,
   type BusinessUnitMaster,
   type DepartmentMaster,
   type DivisionMaster,
@@ -44,7 +46,7 @@ export default function MasterDepartmentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
-  const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [buFilter, setBuFilter] = useState("all");
@@ -263,19 +265,61 @@ export default function MasterDepartmentPage() {
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     setUploadFileName(file?.name || "No file chosen");
-    setUploadInfo("");
   };
 
   const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Master Department belum tersedia.");
+    void (async () => {
+      const result = await downloadDepartmentTemplate();
+      if (!result.success || !result.blob) {
+        showFeedback(result.message || "Gagal download template", "Gagal Download");
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename || "master-department-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    })();
   };
 
   const onUploadMaster = () => {
-    if (uploadFileName === "No file chosen") {
-      setUploadInfo("Pilih file terlebih dahulu.");
-      return;
-    }
-    setUploadInfo("Upload bulk Master Department belum tersedia.");
+    void (async () => {
+      const fileInput = document.getElementById("master-department-file") as HTMLInputElement | null;
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showFeedback("Pilih file Excel terlebih dahulu.", "Validasi");
+        return;
+      }
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+        showFeedback("Format file harus Excel (.xlsx atau .xls).", "Validasi");
+        return;
+      }
+      setUploadLoading(true);
+      const result = await uploadDepartmentFile(file);
+      setUploadLoading(false);
+      if (!result.success) {
+        showFeedback(result.message || "Gagal upload file", "Gagal Upload");
+        return;
+      }
+      let message = `Upload berhasil! Imported: ${result.imported ?? 0}, Updated: ${result.updated ?? 0}, Gagal: ${result.failed ?? 0}`;
+      if (result.errors && result.errors.length > 0) {
+        message += "\n\nErrors:\n";
+        result.errors.slice(0, 5).forEach((err) => {
+          message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
+        });
+        if (result.errors.length > 5) {
+          message += `... dan ${result.errors.length - 5} error lainnya`;
+        }
+      }
+      showFeedback(message, "Upload Selesai");
+      setUploadFileName("No file chosen");
+      if (fileInput) fileInput.value = "";
+      await loadData();
+    })();
   };
 
   return (
@@ -444,15 +488,14 @@ export default function MasterDepartmentPage() {
             <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster}>
-              Upload
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster} disabled={uploadLoading}>
+              {uploadLoading ? "Uploading..." : "Upload"}
             </button>
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom minimal: BU, Divisi, Dept Code, Department Name, Status.
+          Format file: Excel (.xlsx/.xls). Kolom: Divisi Code, Department Code, Department Name, Status. Download template untuk format yang benar.
         </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
