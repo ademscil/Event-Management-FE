@@ -420,8 +420,8 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "rating") {
-    const parsedScale = Number(element.options?.[0] || 10);
-    const max = Number.isFinite(parsedScale) ? Math.min(10, Math.max(3, Math.round(parsedScale))) : 10;
+    const parsedScale = Number(element.options[0]);
+    const max = Number.isFinite(parsedScale) && parsedScale >= 1 ? Math.min(10, Math.max(1, Math.round(parsedScale))) : 10;
     const current = Number(values[element.id] || 0);
     return (
       <div className={styles.previewRatingRow}>
@@ -433,14 +433,24 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "likert") {
-    const cols = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-    const rows = element.options.length > 0 ? element.options : ["Statement 1", "Statement 2"];
+    // element.options berisi rows (statement). Skala kolom dibaca dari options terakhir jika berupa angka,
+    // atau default 10. Format: rows normal, skala disimpan terpisah di ratingScale via PreviewElement.
+    // Karena PreviewElement tidak punya field ratingScale, kita baca dari options:
+    // convention: jika options terakhir adalah string angka bulat, itu adalah skala; sisanya adalah rows.
+    const rawOptions = element.options;
+    const lastItem = rawOptions[rawOptions.length - 1];
+    const lastAsNum = Number(lastItem);
+    const hasScaleAtEnd = rawOptions.length > 0 && Number.isFinite(lastAsNum) && lastAsNum >= 1 && lastAsNum <= 10 && String(Math.round(lastAsNum)) === String(lastItem);
+    const scale = hasScaleAtEnd ? Math.round(lastAsNum) : 10;
+    const rows = hasScaleAtEnd ? rawOptions.slice(0, -1) : rawOptions;
+    const effectiveRows = rows.length > 0 ? rows : ["Statement 1", "Statement 2"];
+    const cols = Array.from({ length: scale }, (_, idx) => String(idx + 1));
     return (
       <div className={styles.previewMatrixWrap}>
         <table className={styles.previewMatrixTable}>
           <thead><tr><th>Statement</th>{cols.map((c) => <th key={`${element.id}-c-${c}`}>{c}</th>)}</tr></thead>
           <tbody>
-            {rows.map((row, rowIdx) => (
+            {effectiveRows.map((row, rowIdx) => (
               <tr key={`${element.id}-r-${rowIdx}`}>
                 <td>{row}</td>
                 {cols.map((col) => {

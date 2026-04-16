@@ -4,7 +4,22 @@ type EventStatusSource = Pick<SurveyOverviewItem, "Status" | "StartDate" | "EndD
 
 function parseDate(value?: string | null): Date | null {
   if (!value) return null;
-  const parsed = new Date(value);
+  const normalized = String(value).trim().replace(" ", "T").replace(/Z$/i, "");
+  const match = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(?::(\d{2}))?(?::(\d{2}))?(?:\.(\d+))?$/,
+  );
+  if (!match) return null;
+  const [, year, month, day, hour, minute = "0", second = "0", fraction = "0"] = match;
+  const milliseconds = Number(String(fraction).slice(0, 3).padEnd(3, "0"));
+  const parsed = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    milliseconds,
+  );
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
 }
@@ -35,6 +50,17 @@ export function resolveEventStatus(event: EventStatusSource, now: Date = new Dat
   }
 
   return rawStatus || "-";
+}
+
+export function getEventStatusLabel(status: string): string {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized) return "-";
+  if (normalized === "draft") return "Draft";
+  if (normalized === "in design") return "In Design";
+  if (normalized === "active") return "Active";
+  if (normalized === "closed") return "Closed";
+  if (normalized === "archived") return "Archived";
+  return status;
 }
 
 export function canPublishEvent(endDateValue?: string | null, now: Date = new Date()): boolean {

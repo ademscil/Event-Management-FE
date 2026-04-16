@@ -17,44 +17,12 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Dropdown } from "@/components/common/dropdown";
 import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import styles from "../page-mockup.module.css";
+import MasterUserFormModal from "./master-user-form-modal";
+import { matchesUserSearch, roleLabel } from "./master-user-utils";
 
 const ITEMS_PER_PAGE = 10;
 
 type UploadUserError = { row: number; errors: string[] };
-
-function roleLabel(role: string): string {
-  switch (role) {
-    case "SuperAdmin":
-      return "Super Admin";
-    case "AdminEvent":
-      return "Admin Event";
-    case "ITLead":
-      return "IT Lead";
-    case "DepartmentHead":
-      return "Dept Head";
-    default:
-      return role;
-  }
-}
-
-function matchesUserSearch(user: UserListItem, searchBy: string, keyword: string): boolean {
-  const term = keyword.trim().toLowerCase();
-  if (!term) return true;
-
-  if (searchBy === "npk") return (user.NPK || "").toLowerCase().includes(term);
-  if (searchBy === "username") return user.Username.toLowerCase().includes(term);
-  if (searchBy === "name") return user.DisplayName.toLowerCase().includes(term);
-  if (searchBy === "email") return user.Email.toLowerCase().includes(term);
-  if (searchBy === "role") return roleLabel(user.Role).toLowerCase().includes(term);
-
-  return (
-    (user.NPK || "").toLowerCase().includes(term) ||
-    user.Username.toLowerCase().includes(term) ||
-    user.DisplayName.toLowerCase().includes(term) ||
-    user.Email.toLowerCase().includes(term) ||
-    roleLabel(user.Role).toLowerCase().includes(term)
-  );
-}
 
 export default function MasterUserPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -658,179 +626,40 @@ export default function MasterUserPage() {
         </div>
       </section>
 
-      {showCreateModal ? (
-        <div className={styles.modalOverlay} onClick={resetUserForm} role="presentation">
-          <div
-            className={`${styles.modalCard} ${styles.wideModalCard}`}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={editingUser ? "Edit User" : "Create User"}
-          >
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editingUser ? "Edit User" : "Create User"}</h2>
-              <button className={styles.modalClose} onClick={resetUserForm} type="button">
-                x
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <div className={styles.modalGridTwo}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>LDAP User</label>
-                  <button
-                    type="button"
-                    className={`${styles.toggleSwitch} ${newUseLdap ? styles.toggleSwitchOn : ""}`}
-                    onClick={() => setNewUseLdap((prev) => !prev)}
-                    aria-pressed={newUseLdap}
-                    aria-label={`LDAP User ${newUseLdap ? "enabled" : "disabled"}`}
-                  >
-                    <span className={styles.toggleThumb} />
-                  </button>
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Username</label>
-                  <input
-                    className={styles.input}
-                    placeholder="username"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>NPK</label>
-                  <input
-                    className={styles.input}
-                    placeholder="Nomor NPK"
-                    value={newNpk}
-                    onChange={(e) => setNewNpk(e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Full Name</label>
-                  <input
-                    className={styles.input}
-                    placeholder="Nama user"
-                    value={newDisplayName}
-                    onChange={(e) => setNewDisplayName(e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Email</label>
-                  <input
-                    className={styles.input}
-                    placeholder="user@company.co.id"
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Phone Number</label>
-                  <input
-                    className={styles.input}
-                    placeholder="6281234567890"
-                    value={newPhoneNumber}
-                    onChange={(e) => setNewPhoneNumber(e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Role</label>
-                  <Dropdown
-                    className={styles.select}
-                    options={[
-                      { value: "SuperAdmin", label: "Super Admin" },
-                      { value: "AdminEvent", label: "Admin Event" },
-                      { value: "ITLead", label: "IT Lead" },
-                      { value: "DepartmentHead", label: "Dept Head" },
-                    ]}
-                    value={newRole}
-                    onChange={(value) => setNewRole(value as typeof newRole)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Business Unit</label>
-                  <Dropdown
-                    className={styles.select}
-                    options={[
-                      { value: "", label: "Pilih Business Unit" },
-                      ...businessUnits.map((businessUnit) => ({
-                        value: businessUnit.BusinessUnitId,
-                        label: businessUnit.Name,
-                      })),
-                    ]}
-                    value={newBusinessUnitId}
-                    onChange={setNewBusinessUnitId}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Divisi</label>
-                  <Dropdown
-                    className={styles.select}
-                    options={[
-                      { value: "", label: "Pilih Divisi" },
-                      ...filteredDivisions.map((division) => ({
-                        value: division.DivisionId,
-                        label: division.Name,
-                      })),
-                    ]}
-                    value={newDivisionId}
-                    onChange={setNewDivisionId}
-                    disabled={!newBusinessUnitId}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Department</label>
-                  <Dropdown
-                    className={styles.select}
-                    options={[
-                      { value: "", label: "Pilih Department" },
-                      ...filteredDepartments.map((department) => ({
-                        value: department.DepartmentId,
-                        label: department.Name,
-                      })),
-                    ]}
-                    value={newDepartmentId}
-                    onChange={setNewDepartmentId}
-                    disabled={!newDivisionId}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Status</label>
-                  <Dropdown
-                    className={styles.select}
-                    options={[
-                      { value: "Active", label: "Active" },
-                      { value: "Inactive", label: "Inactive" },
-                    ]}
-                    value={newStatus}
-                    onChange={setNewStatus}
-                  />
-                </div>
-                {!newUseLdap ? (
-                  <div className={styles.formGroup}>
-                    <label className={styles.label}>Password</label>
-                    <input
-                      className={styles.input}
-                      placeholder="Masukkan password"
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <div className={styles.modalFooter}>
-              <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={resetUserForm} type="button">
-                Cancel
-              </button>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={onSubmitUser} disabled={submittingUser} type="button">
-                {submittingUser ? (editingUser ? "Saving..." : "Creating...") : (editingUser ? "Save" : "Create")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <MasterUserFormModal
+        businessUnits={businessUnits}
+        editingUser={editingUser}
+        filteredDepartments={filteredDepartments}
+        filteredDivisions={filteredDivisions}
+        newBusinessUnitId={newBusinessUnitId}
+        newDepartmentId={newDepartmentId}
+        newDisplayName={newDisplayName}
+        newDivisionId={newDivisionId}
+        newEmail={newEmail}
+        newNpk={newNpk}
+        newPassword={newPassword}
+        newPhoneNumber={newPhoneNumber}
+        newRole={newRole}
+        newStatus={newStatus}
+        newUseLdap={newUseLdap}
+        newUsername={newUsername}
+        onClose={resetUserForm}
+        onSubmit={onSubmitUser}
+        setNewBusinessUnitId={setNewBusinessUnitId}
+        setNewDepartmentId={setNewDepartmentId}
+        setNewDisplayName={setNewDisplayName}
+        setNewDivisionId={setNewDivisionId}
+        setNewEmail={setNewEmail}
+        setNewNpk={setNewNpk}
+        setNewPassword={setNewPassword}
+        setNewPhoneNumber={setNewPhoneNumber}
+        setNewRole={setNewRole}
+        setNewStatus={setNewStatus}
+        setNewUseLdap={setNewUseLdap}
+        setNewUsername={setNewUsername}
+        showCreateModal={showCreateModal}
+        submittingUser={submittingUser}
+      />
       <ConfirmDialog
         open={Boolean(confirmTargetUser)}
         title={confirmNextIsActive ? "Activate User" : "Deactivate User"}
@@ -858,27 +687,3 @@ export default function MasterUserPage() {
     </>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

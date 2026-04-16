@@ -15,6 +15,8 @@ export type FunctionApplicationMappingItem = {
   functionId: string;
   functionCode: string;
   functionName: string;
+  itLeadUserId?: string | null;
+  itLeadName?: string | null;
   applications: Array<{
     mappingId: string;
     applicationId: string;

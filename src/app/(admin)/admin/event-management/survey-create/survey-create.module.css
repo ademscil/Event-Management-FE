@@ -525,6 +525,130 @@
   height: 34px;
 }
 
+.scheduleModeBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef6ff 100%);
+}
+
+.scheduleModeChip,
+.scheduleModeChipActive {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scheduleModeChipActive {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.scheduleTimezone {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.scheduleCard {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dbe2ea;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.scheduleTimeCard {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.scheduleTimeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scheduleTimeTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.scheduleTimeHint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.scheduleTimeReadout {
+  min-width: 72px;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.scheduleTimeInputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scheduleSelectLabel {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.scheduleTimeSelect {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.scheduleNote {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 12px;
+}
+
 .templateModal {
   max-width: 980px;
 }
@@ -984,6 +1108,9 @@
   .builderSidebar { border-right: 0; border-bottom: 1px solid #e5e7eb; }
   .topbar { align-items: flex-start; }
   .targetGrid { grid-template-columns: 1fr; }
+  .scheduleGrid { grid-template-columns: 1fr; }
+  .scheduleTimeInputs { grid-template-columns: 1fr; }
+  .scheduleTimezone { margin-left: 0; width: 100%; }
   .templateGrid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
   .previewTopbar {
     flex-wrap: wrap;

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import {
   createFunctionApplicationMapping,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/mappings";
 import { fetchApplicationsMaster, fetchFunctionsMaster, type ApplicationMaster, type FunctionMaster } from "@/lib/master-data";
 import styles from "../mapping-pages.module.css";
+import baseStyles from "../page-mockup.module.css";
 
 type DeleteTarget =
   | { type: "row"; row: FunctionApplicationMappingItem }
@@ -31,9 +33,11 @@ export default function FunctionAplikasiPage() {
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
   const [uploadInfo, setUploadInfo] = useState("");
 
-  const [filterHead, setFilterHead] = useState("");
-  const [filterFunction, setFilterFunction] = useState("");
-  const [filterApplication, setFilterApplication] = useState("");
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
   const [selectedFunctionId, setSelectedFunctionId] = useState("");
@@ -68,6 +72,8 @@ export default function FunctionAplikasiPage() {
     let active = true;
 
     (async () => {
+      setLoading(true);
+
       const [mappingRes, functionRes, appRes] = await Promise.all([
         fetchFunctionApplicationMappingsDetailed(),
         fetchFunctionsMaster(),
@@ -95,18 +101,36 @@ export default function FunctionAplikasiPage() {
   }, []);
 
   const filteredRows = useMemo(() => {
-    const headTerm = filterHead.trim().toLowerCase();
-    const functionTerm = filterFunction.trim().toLowerCase();
-    const appTerm = filterApplication.trim().toLowerCase();
+    const term = appliedKeyword.trim().toLowerCase();
 
     return rows.filter((row) => {
-      const mappedHeadName = "-";
-      if (headTerm && !mappedHeadName.toLowerCase().includes(headTerm)) return false;
-      if (functionTerm && !row.functionName.toLowerCase().includes(functionTerm)) return false;
-      if (appTerm && !row.applications.some((app) => app.applicationName.toLowerCase().includes(appTerm))) return false;
+      const itLeadName = row.itLeadName || "";
+      if (!term) return true;
+
+      if (appliedSearchBy === "head") {
+        return itLeadName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "function") {
+        return row.functionName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "application") {
+        return row.applications.some((app) => app.applicationName.toLowerCase().includes(term));
+      }
+
+      const haystacks = [
+        itLeadName,
+        row.functionName,
+        ...row.applications.map((app) => app.applicationName),
+      ];
+      if (!haystacks.some((value) => String(value || "").toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [rows, filterHead, filterFunction, filterApplication]);
+  }, [rows, appliedKeyword, appliedSearchBy]);
+
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
 
   const toggleAppSelection = (applicationId: string) => {
     setSelectedAppIds((prev) =>
@@ -276,27 +300,39 @@ export default function FunctionAplikasiPage() {
           <h2 className={styles.panelTitle}>Filter Data</h2>
           <div className={styles.meta}>Total: {filteredRows.length} records</div>
         </div>
-        <div className={styles.filterGrid3}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>IT Dept Head</label>
-            <input className={styles.input} value={filterHead} onChange={(event) => setFilterHead(event.target.value)} placeholder="Cari IT Dept Head" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Function</label>
-            <input className={styles.input} value={filterFunction} onChange={(event) => setFilterFunction(event.target.value)} placeholder="Cari Function" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Application</label>
-            <input className={styles.input} value={filterApplication} onChange={(event) => setFilterApplication(event.target.value)} placeholder="Cari Application" />
-          </div>
+        <div className={baseStyles.periodRow}>
+          <div className={baseStyles.periodLabel}>STATUS</div>
+          <div className={baseStyles.periodColon}>:</div>
+          <Dropdown
+            className={`${baseStyles.select} ${baseStyles.statusControl}`}
+            options={[{ value: "all", label: "All" }]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
         </div>
+        <SearchBar
+          rowClassName={baseStyles.masterSearchRow}
+          selectClassName={baseStyles.masterSearchSelect}
+          inputClassName={`${baseStyles.input} ${baseStyles.masterSearchInput}`}
+          buttonClassName={baseStyles.masterSearchButton}
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "head", label: "IT Lead" },
+            { value: "function", label: "Function" },
+            { value: "application", label: "Application" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Data Mapping Function - Aplikasi</h2>
         </div>
-        <div className={styles.alert}>Kolom IT Dept Head sementara ditampilkan `-` karena data relasi belum tersedia dari endpoint backend.</div>
         {error ? <div className={styles.error}>{error}</div> : null}
         {loading ? <div className={styles.meta}>Memuat data...</div> : null}
         {!loading ? (
@@ -305,7 +341,7 @@ export default function FunctionAplikasiPage() {
               <thead>
                 <tr>
                   <th>No</th>
-                  <th>IT Dept Head</th>
+                  <th>IT Lead</th>
                   <th>Function</th>
                   <th>Applications</th>
                   <th>Actions</th>
@@ -322,7 +358,7 @@ export default function FunctionAplikasiPage() {
                   filteredRows.map((row, index) => (
                     <tr key={row.functionId}>
                       <td>{index + 1}</td>
-                      <td>-</td>
+                      <td>{row.itLeadName || "-"}</td>
                       <td>{row.functionName}</td>
                       <td>
                         <div className={styles.tags}>

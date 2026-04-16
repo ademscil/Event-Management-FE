@@ -9,8 +9,18 @@ import {
 } from "@/lib/reports";
 import type { UserRole } from "@/types/auth";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import styles from "./report-detail.module.css";
+import {
+  fmtScore,
+  fmtTarget,
+  formatDateTime,
+  normalizeRole,
+  resolveReportTitle,
+  safeLabel,
+  subscribeToClientReady,
+  toNumber,
+} from "./report-detail-utils";
 
 type BuRow = {
   bu: string;
@@ -48,56 +58,13 @@ type FunctionDetailRow = {
   colorClass: string;
 };
 
-function normalizeRole(input: string | null | undefined): string {
-  return String(input || "").toLowerCase().replace(/[\s_-]/g, "");
-}
-
-function toNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.replace(",", "."));
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function fmtScore(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "";
-  return value.toFixed(2);
-}
-
-function fmtTarget(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "";
-  return value.toFixed(1);
-}
-
-function safeLabel(input: string | null | undefined, fallback = "-"): string {
-  const value = String(input || "").trim();
-  return value || fallback;
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  const date = new Date(String(value || ""));
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function subscribeToClientReady(callback: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener("load", callback);
-  return () => window.removeEventListener("load", callback);
-}
-
 export default function ReportDetailPage() {
   const params = useParams<{ surveyId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const surveyId = String(params?.surveyId || "");
+  const printMode = searchParams.get("print") === "pdf";
+  const autoPrint = searchParams.get("autoprint") === "1";
 
   const isClientReady = useSyncExternalStore(
     subscribeToClientReady,
@@ -117,46 +84,97 @@ export default function ReportDetailPage() {
   const [error, setError] = useState("");
   const [report, setReport] = useState<GeneratedReport | null>(null);
   const [surveyItem, setSurveyItem] = useState<ReportSelectionItem | null>(null);
+  const [hasAutoPrinted, setHasAutoPrinted] = useState(false);
+
   useEffect(() => {
     if (!isClientReady || !canAccess) {
       return;
     }
 
+    let active = true;
+
     const run = async () => {
       if (!surveyId) {
+        if (!active) return;
+        setReport(null);
+        setSurveyItem(null);
         setError("Survey ID tidak valid.");
         setLoading(false);
         return;
       }
+
       setLoading(true);
       setError("");
-      const selectionResult = await fetchReportSelectionList();
 
-      if (selectionResult.success) {
-        const currentSurvey = selectionResult.surveys.find((item) => item.surveyId === surveyId) || null;
-        setSurveyItem(currentSurvey);
-        if (currentSurvey && !currentSurvey.hasGeneratedReport) {
+      try {
+        const selectionResult = await fetchReportSelectionList();
+        if (!active) return;
+
+        if (selectionResult.success) {
+          const currentSurvey = selectionResult.surveys.find((item) => item.surveyId === surveyId) || null;
+          setSurveyItem(currentSurvey);
+          if (currentSurvey && !currentSurvey.hasGeneratedReport) {
+            setReport(null);
+            setError("Report belum digenerate untuk event ini.");
+            return;
+          }
+        } else {
+          setSurveyItem(null);
+        }
+
+        const reportResult = await fetchSurveyReport({ surveyId, includeTakenOut: false });
+        if (!active) return;
+
+        if (!reportResult.success || !reportResult.report) {
           setReport(null);
-          setError("Report belum digenerate untuk event ini.");
-          setLoading(false);
+          setError(reportResult.message || "Gagal memuat report.");
           return;
         }
-      }
 
-      const reportResult = await fetchSurveyReport({ surveyId, includeTakenOut: false });
-
-      if (!reportResult.success || !reportResult.report) {
+        setReport(reportResult.report);
+      } catch {
+        if (!active) return;
         setReport(null);
-        setError(reportResult.message || "Gagal memuat report.");
-        setLoading(false);
-        return;
+        setSurveyItem(null);
+        setError("Terjadi kesalahan saat memuat report.");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-
-      setReport(reportResult.report);
-      setLoading(false);
     };
+
     void run();
+
+    return () => {
+      active = false;
+    };
   }, [canAccess, isClientReady, surveyId]);
+
+  useEffect(() => {
+    if (!printMode || !autoPrint || hasAutoPrinted || loading || error || !report) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.print();
+      setHasAutoPrinted(true);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint, error, hasAutoPrinted, loading, printMode, report]);
+
+  useEffect(() => {
+    if (!printMode) {
+      return;
+    }
+
+    const previousTitle = document.title;
+    const nextTitle = safeLabel(resolveReportTitle(report?.survey?.title, surveyItem), "Report");
+    document.title = `${nextTitle} - Report`;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [printMode, report?.survey?.title, surveyItem]);
 
   const numericRows = useMemo(() => {
     if (!report) return [] as Array<GeneratedReport["responses"][number] & { score: number }>;
@@ -350,7 +368,7 @@ export default function ReportDetailPage() {
 
   if (!isClientReady) {
     return (
-      <section className={styles.pageShell}>
+      <section className={`${styles.pageShell} ${printMode ? styles.printMode : ""}`}>
         <div className={styles.pageFrame}>
           <h1 className={styles.titleBanner}>Loading report...</h1>
         </div>
@@ -372,7 +390,7 @@ export default function ReportDetailPage() {
       <section className={styles.pageShell}>
         <div className={styles.pageFrame}>
           <h1 className={styles.titleBanner}>
-            The final result {safeLabel(report?.survey?.title || surveyItem?.title, "Survey")} represents.
+            The final result {resolveReportTitle(report?.survey?.title, surveyItem)} represents.
           </h1>
 
           {loading ? <p className={styles.loadingText}>Memuat report detail...</p> : null}
@@ -605,7 +623,7 @@ export default function ReportDetailPage() {
                   </table>
                 </div>
 
-                <div className={styles.actionRow}>
+                <div className={`${styles.actionRow} ${printMode ? styles.screenOnly : ""}`}>
                   <button type="button" className={styles.actionGhost} onClick={() => router.push("/admin/report")}>
                     Home
                   </button>

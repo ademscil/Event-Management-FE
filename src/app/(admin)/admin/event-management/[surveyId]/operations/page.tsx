@@ -8,19 +8,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { Dropdown } from "@/components/common/dropdown";
 import styles from "./operations.module.css";
-
-interface ScheduledOperation {
-  operationId: string;
-  operationType: string;
-  frequency: string;
-  scheduledDate?: string | null;
-  scheduledTime?: string | null;
-  dayOfWeek?: number | null;
-  status: string;
-}
+import CancelScheduledOperationDialog from "./cancel-scheduled-operation-dialog";
+import {
+  formatOperationDate,
+  getStatusBadge,
+  parseRecipients,
+  toDownloadFileStem,
+  validateScheduleInput,
+  type DayOfWeekValue,
+  type ScheduledOperation,
+} from "./operations-utils";
 
 type ShareTab = "invite" | "qr" | "embed";
-type DayOfWeekValue = "0" | "1" | "2" | "3" | "4" | "5" | "6";
 
 const frequencyOptions: { label: string; value: ScheduleFrequency }[] = [
   { label: "Once", value: "once" },
@@ -77,56 +76,6 @@ export default function OperationsPage() {
   const [reminderLoading, setReminderLoading] = useState(false);
   const [openInfoPanel, setOpenInfoPanel] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ScheduledOperation | null>(null);
-
-  const parseRecipients = (value: string): string[] => (
-    value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  );
-
-  const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
-  const validateScheduleInput = (input: {
-    date: string;
-    time: string;
-    frequency: ScheduleFrequency;
-    subject: string;
-    messageText: string;
-    recipients: string[];
-    dayOfWeek?: DayOfWeekValue;
-  }): string | null => {
-    if (!input.date || !input.time) {
-      return "Tanggal dan waktu wajib diisi";
-    }
-
-    if (input.frequency === "weekly" && (input.dayOfWeek === undefined || input.dayOfWeek === null)) {
-      return "Hari wajib diisi untuk recurring mingguan";
-    }
-
-    const invalidRecipients = input.recipients.filter((email) => !isValidEmail(email));
-    if (invalidRecipients.length > 0) {
-      return `Format email tidak valid: ${invalidRecipients[0]}`;
-    }
-
-    const now = new Date();
-    const scheduleDate = new Date(`${input.date}T${input.time}:00`);
-    if (Number.isNaN(scheduleDate.getTime())) {
-      return "Format tanggal/waktu tidak valid";
-    }
-
-    if (input.frequency === "once" && scheduleDate <= now) {
-      return "Jadwal once harus lebih besar dari waktu saat ini";
-    }
-
-    const startDateOnly = new Date(`${input.date}T00:00:00`);
-    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (input.frequency !== "once" && startDateOnly < todayDateOnly) {
-      return "Start date recurring tidak boleh di masa lalu";
-    }
-
-    return null;
-  };
 
   useEffect(() => {
     const load = async () => {
@@ -204,7 +153,7 @@ export default function OperationsPage() {
     if (!qrCodeUrl) return;
     const link = document.createElement("a");
     link.href = qrCodeUrl;
-    link.download = `qr-${surveyId}.png`;
+    link.download = `qr-${toDownloadFileStem(surveyTitle, "survey")}.png`;
     link.click();
   };
 
@@ -225,8 +174,6 @@ export default function OperationsPage() {
       date: blastDate,
       time: blastTime,
       frequency: blastFrequency,
-      subject: blastSubject,
-      messageText: blastMessage,
       recipients: recipientEmails,
       dayOfWeek: blastFrequency === "weekly" ? blastDayOfWeek : undefined,
     });
@@ -275,8 +222,6 @@ export default function OperationsPage() {
       date: reminderDate,
       time: reminderTime,
       frequency: reminderFrequency,
-      subject: reminderSubject,
-      messageText: reminderMessage,
       recipients: recipientEmails,
       dayOfWeek: reminderFrequency === "weekly" ? reminderDayOfWeek : undefined,
     });
@@ -315,22 +260,6 @@ export default function OperationsPage() {
     setReminderMessage("");
     setReminderRecipients("");
     await loadOperations();
-  };
-
-  const formatDate = (date?: string | null, time?: string | null) => {
-    const raw = date || "";
-    if (!raw) return "-";
-    const d = time ? new Date(`${raw}T${time}`) : new Date(raw);
-    if (Number.isNaN(d.getTime())) return "-";
-    return d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
-  };
-
-  const getStatusBadge = (status: string) => {
-    const normalized = String(status || "").toLowerCase();
-    if (normalized === "pending") return styles.badgePending;
-    if (normalized === "completed") return styles.badgeCompleted;
-    if (normalized === "failed") return styles.badgeFailed;
-    return styles.badgeCancelled;
   };
 
   if (loading) return <div className={styles.wrapper}>Memuat...</div>;
@@ -600,7 +529,7 @@ export default function OperationsPage() {
                 {operations.map((op, index) => (
                   <tr key={op.operationId || `${op.operationType}-${op.scheduledDate}-${index}`}>
                     <td>{op.operationType || "-"}</td>
-                    <td>{formatDate(op.scheduledDate, op.scheduledTime)}</td>
+                    <td>{formatOperationDate(op.scheduledDate, op.scheduledTime)}</td>
                     <td>{op.frequency || "-"}</td>
                     <td>
                       <span className={`${styles.badge} ${getStatusBadge(op.status)}`}>
@@ -628,29 +557,13 @@ export default function OperationsPage() {
         )}
       </section>
 
-      {cancelTarget ? (
-        <div className={styles.modalOverlay} onClick={() => setCancelTarget(null)}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>Cancel Scheduled Operation</h3>
-            </div>
-            <div className={styles.modalBody}>
-              <p className={styles.modalText}>
-                Yakin ingin membatalkan {cancelTarget.operationType || "operation"} yang dijadwalkan pada{" "}
-                {formatDate(cancelTarget.scheduledDate, cancelTarget.scheduledTime)}?
-              </p>
-            </div>
-            <div className={styles.modalActions}>
-              <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setCancelTarget(null)}>
-                Batal
-              </button>
-              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void handleCancel(cancelTarget.operationId)}>
-                Ya, Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <CancelScheduledOperationDialog
+        cancelTarget={cancelTarget}
+        onCancel={() => setCancelTarget(null)}
+        onConfirm={(operationId) => {
+          void handleCancel(operationId);
+        }}
+      />
     </div>
   );
 }

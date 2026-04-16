@@ -76,7 +76,9 @@ export function SearchBar({
           style={{ cursor: "pointer", userSelect: "none" }}
         >
           {selectedOption.label}
-          <span style={{ marginLeft: "6px", fontSize: "10px" }}>{isOpen ? "▲" : "▼"}</span>
+          <span aria-hidden="true" style={{ marginLeft: "6px", fontSize: "10px" }}>
+            {isOpen ? "^" : "v"}
+          </span>
         </button>
         {isOpen && (
           <div
@@ -109,14 +111,14 @@ export function SearchBar({
                   fontSize: "14px",
                   fontWeight: selectedValue === option.value ? 600 : 400,
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={(event) => {
                   if (selectedValue !== option.value) {
-                    e.currentTarget.style.background = "#f9fafb";
+                    event.currentTarget.style.background = "#f9fafb";
                   }
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={(event) => {
                   if (selectedValue !== option.value) {
-                    e.currentTarget.style.background = "#ffffff";
+                    event.currentTarget.style.background = "#ffffff";
                   }
                 }}
               >

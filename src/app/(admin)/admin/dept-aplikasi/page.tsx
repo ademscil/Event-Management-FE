@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import {
   createDepartmentApplicationMapping,
@@ -21,6 +22,7 @@ import {
   type DivisionMaster,
 } from "@/lib/master-data";
 import styles from "../mapping-pages.module.css";
+import baseStyles from "../page-mockup.module.css";
 
 type RowItem = {
   key: string;
@@ -82,10 +84,11 @@ export default function DeptAplikasiPage() {
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
   const [uploadInfo, setUploadInfo] = useState("");
 
-  const [filterBu, setFilterBu] = useState("");
-  const [filterDivision, setFilterDivision] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState("");
-  const [filterApplication, setFilterApplication] = useState("");
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
   const [selectedBu, setSelectedBu] = useState("");
@@ -126,6 +129,8 @@ export default function DeptAplikasiPage() {
     let active = true;
 
     (async () => {
+      setLoading(true);
+
       const [mappingRes, buRes, divRes, deptRes, appRes] = await Promise.all([
         fetchDepartmentApplicationMappingsHierarchical(),
         fetchBusinessUnitsMaster(),
@@ -157,19 +162,39 @@ export default function DeptAplikasiPage() {
   }, []);
 
   const filteredRows = useMemo(() => {
-    const buTerm = filterBu.trim().toLowerCase();
-    const divTerm = filterDivision.trim().toLowerCase();
-    const deptTerm = filterDepartment.trim().toLowerCase();
-    const appTerm = filterApplication.trim().toLowerCase();
+    const term = appliedKeyword.trim().toLowerCase();
 
     return rows.filter((row) => {
-      if (buTerm && !row.businessUnitName.toLowerCase().includes(buTerm)) return false;
-      if (divTerm && !row.divisionName.toLowerCase().includes(divTerm)) return false;
-      if (deptTerm && !row.departmentName.toLowerCase().includes(deptTerm)) return false;
-      if (appTerm && !row.applications.some((app) => app.applicationName.toLowerCase().includes(appTerm))) return false;
+      if (!term) return true;
+
+      if (appliedSearchBy === "businessUnit") {
+        return row.businessUnitName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "division") {
+        return row.divisionName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "department") {
+        return row.departmentName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "application") {
+        return row.applications.some((app) => app.applicationName.toLowerCase().includes(term));
+      }
+
+      const haystacks = [
+        row.businessUnitName,
+        row.divisionName,
+        row.departmentName,
+        ...row.applications.map((app) => app.applicationName),
+      ];
+      if (!haystacks.some((value) => String(value || "").toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [rows, filterBu, filterDivision, filterDepartment, filterApplication]);
+  }, [rows, appliedKeyword, appliedSearchBy]);
+
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
 
   const divisionOptions = useMemo(
     () =>
@@ -358,24 +383,34 @@ export default function DeptAplikasiPage() {
           <h2 className={styles.panelTitle}>Filter Data</h2>
           <div className={styles.meta}>Total: {filteredRows.length} records</div>
         </div>
-        <div className={styles.filterGrid}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Business Unit</label>
-            <input className={styles.input} value={filterBu} onChange={(event) => setFilterBu(event.target.value)} placeholder="Cari Business Unit" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Division</label>
-            <input className={styles.input} value={filterDivision} onChange={(event) => setFilterDivision(event.target.value)} placeholder="Cari Division" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Department</label>
-            <input className={styles.input} value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} placeholder="Cari Department" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Application</label>
-            <input className={styles.input} value={filterApplication} onChange={(event) => setFilterApplication(event.target.value)} placeholder="Cari Application" />
-          </div>
+        <div className={baseStyles.periodRow}>
+          <div className={baseStyles.periodLabel}>STATUS</div>
+          <div className={baseStyles.periodColon}>:</div>
+          <Dropdown
+            className={`${baseStyles.select} ${baseStyles.statusControl}`}
+            options={[{ value: "all", label: "All" }]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
         </div>
+        <SearchBar
+          rowClassName={baseStyles.masterSearchRow}
+          selectClassName={baseStyles.masterSearchSelect}
+          inputClassName={`${baseStyles.input} ${baseStyles.masterSearchInput}`}
+          buttonClassName={baseStyles.masterSearchButton}
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "businessUnit", label: "Business Unit" },
+            { value: "division", label: "Division" },
+            { value: "department", label: "Department" },
+            { value: "application", label: "Application" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>

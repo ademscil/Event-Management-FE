@@ -28,6 +28,15 @@ function shortText(value?: string | null, max = 72): string {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+function getCommentSelectionAriaLabel(row: ApprovalComment): string {
+  const question = String(row.QuestionText || "").trim();
+  const application = String(row.ApplicationName || "").trim();
+  if (question && application) return `Pilih komentar ${question} - ${application}`;
+  if (question) return `Pilih komentar ${question}`;
+  if (application) return `Pilih komentar ${application}`;
+  return "Pilih komentar";
+}
+
 export default function BestCommentsPage() {
   const role: UserRole | null = getCurrentUser()?.role ?? null;
   const canAccess = role === "AdminEvent" || role === "DepartmentHead";
@@ -276,7 +285,7 @@ export default function BestCommentsPage() {
                               <input
                                 type="checkbox"
                                 checked={selected}
-                                aria-label={`Pilih komentar ${row.QuestionResponseId}`}
+                                aria-label={getCommentSelectionAriaLabel(row)}
                                 onChange={(event) =>
                                   setSelectedKeys((prev) => {
                                     if (event.target.checked) return Array.from(new Set([...prev, key]));

@@ -68,6 +68,32 @@ function normalizeQuestion(question: PublicQuestion): PreviewElement {
     threshold?: unknown;
   };
   const type = normalizeQuestionType(question);
+
+  // Untuk rating: simpan ratingScale di options[0] agar preview bisa baca skala yang benar
+  if (type === "rating") {
+    const scale = Number(options.ratingScale ?? options.scale ?? 10);
+    const clampedScale = Number.isFinite(scale) ? Math.min(10, Math.max(1, Math.round(scale))) : 10;
+    return {
+      id: question.questionId,
+      type,
+      title: question.promptText || "",
+      subtitle: question.subtitle || "",
+      required: Boolean(question.isMandatory),
+      options: [String(clampedScale)],
+      coverUrl: "",
+      dataSource: typeof options.dataSource === "string" ? (options.dataSource as PreviewElement["dataSource"]) : undefined,
+      optionLayout: "vertical",
+      allowMultipleAnswers: false,
+      displayCondition: options.displayCondition === "after_mapped_selection" ? "after_mapped_selection" : "always",
+      conditionalRequiredSourceId: typeof conditionalRequired.sourceElementId === "string"
+        ? String(conditionalRequired.sourceElementId)
+        : undefined,
+      conditionalRequiredThreshold: Number.isFinite(Number(conditionalRequired.threshold))
+        ? Number(conditionalRequired.threshold)
+        : undefined,
+    };
+  }
+
   const optionSource = Array.isArray(options.options)
     ? options.options
     : type === "likert"
@@ -76,13 +102,24 @@ function normalizeQuestion(question: PublicQuestion): PreviewElement {
         ? Array.isArray(options.columns) ? options.columns : []
         : [];
 
+  // Untuk likert: append skala sebagai elemen terakhir jika berupa angka bulat
+  // Convention yang dibaca oleh survey-preview-element: options terakhir = skala jika angka bulat
+  const resolvedOptions: string[] = type === "likert"
+    ? (() => {
+        const rows = optionSource.map((item) => String(item));
+        const scale = Number(options.ratingScale ?? options.scale ?? 10);
+        const clampedScale = Number.isFinite(scale) && scale >= 1 ? Math.min(10, Math.round(scale)) : 10;
+        return [...rows, String(clampedScale)];
+      })()
+    : optionSource.map((item) => String(item));
+
   return {
     id: question.questionId,
     type,
     title: question.promptText || "",
     subtitle: question.subtitle || "",
     required: Boolean(question.isMandatory),
-    options: optionSource.map((item) => String(item)),
+    options: resolvedOptions,
     coverUrl: type === "hero" ? String(question.imageUrl || options.heroImageUrl || "") : "",
     dataSource: typeof options.dataSource === "string" ? (options.dataSource as PreviewElement["dataSource"]) : undefined,
     optionLayout: options.layout === "horizontal" ? "horizontal" : "vertical",
@@ -311,6 +348,7 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
   const [form, setForm] = useState<PublicSurveyForm | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -563,8 +601,13 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
     }
 
     setSaving(false);
-
     setMessage("Response berhasil dikirim. Terima kasih atas partisipasi Anda.");
+    setSubmitted(true);
+    setCurrentPageIndex(0);
+    setValidationErrors({});
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   if (loading) {
@@ -577,6 +620,41 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
 
   if (!form || !currentPage) {
     return <section className={styles.page}><div className={styles.shell}><div className={styles.empty}>Survey tidak tersedia.</div></div></section>;
+  }
+
+  if (submitted) {
+    return (
+      <section
+        className={styles.page}
+        style={{
+          "--survey-primary": primaryColor,
+          "--survey-secondary": secondaryColor,
+          backgroundColor: form.configuration?.backgroundColor || undefined,
+          backgroundImage: form.configuration?.backgroundImageUrl ? `url(${form.configuration.backgroundImageUrl})` : undefined,
+          backgroundSize: form.configuration?.backgroundImageUrl ? "cover" : undefined,
+        } as CSSProperties}
+      >
+        <div className={styles.shell}>
+          <div className={styles.card}>
+            <div className={styles.hero} style={{ fontFamily: form.configuration?.fontFamily || undefined }}>
+              {form.configuration?.logoUrl ? <img src={form.configuration.logoUrl} alt="Survey logo" className={styles.logo} /> : null}
+              <h1 className={styles.title}>{heroTitle}</h1>
+              {heroSubtitle ? <p className={styles.subtitle}>{heroSubtitle}</p> : null}
+            </div>
+            <div className={`${styles.body} ${styles.successBody}`}>
+              <div className={styles.successPanel}>
+                <div className={styles.successBadge}>Response Submitted</div>
+                <h2 className={styles.successTitle}>Terima kasih atas partisipasi Anda.</h2>
+                <p className={styles.successText}>
+                  Response untuk survey ini sudah berhasil dikirim. Anda tidak perlu mengisi ulang halaman ini.
+                </p>
+                {message ? <div className={styles.alertSuccess}>{message}</div> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

@@ -46,17 +46,37 @@ export default function DashboardPage() {
   const [appliedKeyword, setAppliedKeyword] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
-      const result = await fetchSurveyOverview();
-      setLoading(false);
-      if (!result.success) {
-        setError(result.message || "Gagal memuat data survey");
+      setLoading(true);
+
+      try {
+        const result = await fetchSurveyOverview();
+        if (!active) return;
+
+        if (!result.success) {
+          setError(result.message || "Gagal memuat data survey");
+          setSurveys([]);
+          return;
+        }
+
+        setError("");
+        setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
+      } catch {
+        if (!active) return;
+        setError("Terjadi kesalahan saat memuat data survey");
         setSurveys([]);
-        return;
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setError("");
-      setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
     })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredSurveys = useMemo(() => {
@@ -75,10 +95,7 @@ export default function DashboardPage() {
         return survey.Title.toLowerCase().includes(normalizedKeyword);
       }
 
-      return (
-        survey.Title.toLowerCase().includes(normalizedKeyword) ||
-        effectiveStatus.toLowerCase().includes(normalizedKeyword)
-      );
+      return survey.Title.toLowerCase().includes(normalizedKeyword);
     });
   }, [surveys, periodStart, periodEnd, statusFilter, appliedKeyword, appliedSearchBy]);
 

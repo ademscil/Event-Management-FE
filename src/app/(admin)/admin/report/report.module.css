@@ -130,49 +130,9 @@
 .buttonGhostXs:focus-visible,
 .questionLink:focus-visible,
 .modalClose:focus-visible,
-.fieldControl:focus-visible,
-.searchInlineInput:focus-visible {
+.fieldControl:focus-visible {
   outline: 2px solid #1d4ed8;
   outline-offset: 2px;
-}
-
-.searchInlineRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  max-width: 860px;
-}
-
-.searchInlineLabel {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: #163761;
-  text-transform: uppercase;
-  min-width: 128px;
-}
-
-.searchInlineColon {
-  color: #163761;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.searchInlineInput {
-  flex: 1;
-  min-width: 280px;
-  max-width: 570px;
-}
-
-.searchInlineStatus {
-  width: 180px;
-  min-width: 180px;
-}
-
-.searchControl {
-  min-height: 48px;
 }
 
 .comparisonFilterGrid {
@@ -315,6 +275,13 @@
   line-height: 1.6;
 }
 
+.modalHint {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .modalActions {
   padding: 12px 18px;
   border-top: 1px solid #e5e7eb;
@@ -341,30 +308,6 @@
 }
 
 @media (max-width: 900px) {
-  .searchInlineRow {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    max-width: 100%;
-  }
-
-  .searchInlineColon {
-    display: none;
-  }
-
-  .searchInlineLabel {
-    font-size: 13px;
-  }
-
-  .searchInlineInput {
-    max-width: 100%;
-  }
-
-  .searchInlineStatus {
-    width: 100%;
-    min-width: 0;
-  }
-
   .actions {
     gap: 6px;
   }

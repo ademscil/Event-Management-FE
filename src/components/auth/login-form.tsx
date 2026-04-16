@@ -21,7 +21,6 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ username: "", password: "" });
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetMethod, setResetMethod] = useState<"email" | "phone">("email");
   const [resetIdentifier, setResetIdentifier] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetFeedback, setResetFeedback] = useState({ error: "", message: "" });
@@ -78,7 +77,7 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
 
     if (!resetIdentifier.trim()) {
       setResetFeedback({
-        error: resetMethod === "phone" ? "Nomor telepon wajib diisi" : "Email wajib diisi",
+        error: "Email wajib diisi",
         message: "",
       });
       return;
@@ -86,7 +85,8 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
 
     setResetLoading(true);
     setResetFeedback({ error: "", message: "" });
-    const result = await requestPasswordReset(resetMethod, resetIdentifier.trim());
+
+    const result = await requestPasswordReset("email", resetIdentifier.trim());
     setResetLoading(false);
 
     if (!result.success) {
@@ -169,7 +169,6 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
             type="button"
             onClick={() => {
               setShowForgotPassword(true);
-              setResetMethod("email");
               setResetIdentifier("");
               setResetFeedback({ error: "", message: "" });
             }}
@@ -202,9 +201,8 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
               <div className={styles.methodTabs}>
                 <button
                   type="button"
-                  className={`${styles.methodTab} ${resetMethod === "email" ? styles.methodTabActive : ""}`}
+                  className={`${styles.methodTab} ${styles.methodTabActive}`}
                   onClick={() => {
-                    setResetMethod("email");
                     setResetIdentifier("");
                     setResetFeedback({ error: "", message: "" });
                   }}
@@ -213,33 +211,28 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
                 </button>
                 <button
                   type="button"
-                  className={`${styles.methodTab} ${resetMethod === "phone" ? styles.methodTabActive : ""}`}
-                  onClick={() => {
-                    setResetMethod("phone");
-                    setResetIdentifier("");
-                    setResetFeedback({ error: "", message: "" });
-                  }}
+                  className={`${styles.methodTab} ${styles.methodTabDisabled}`}
+                  disabled
+                  title="Reset password via phone dinonaktifkan sementara"
                 >
                   By Phone
                 </button>
               </div>
 
               <label className={styles.label} htmlFor="forgot-identifier">
-                {resetMethod === "phone" ? "Phone Number" : "Email"}
+                Email
               </label>
               <input
                 id="forgot-identifier"
                 className={`${styles.input} ${resetFeedback.error ? styles.inputError : ""}`}
                 value={resetIdentifier}
                 onChange={(event) => setResetIdentifier(event.target.value)}
-                placeholder={resetMethod === "phone" ? "6281234567890" : "user@company.co.id"}
-                autoComplete={resetMethod === "phone" ? "tel" : "email"}
+                placeholder="user@company.co.id"
+                autoComplete="email"
               />
 
               <p className={styles.helperText}>
-                {resetMethod === "phone"
-                  ? "Masukkan nomor telepon terdaftar. Jika cocok untuk user local, link reset akan dikirim ke email akun yang terhubung."
-                  : "Masukkan email terdaftar. Jika cocok untuk user local, link reset akan dikirim ke email tersebut."}
+                Masukkan email terdaftar. Jika cocok untuk user local, link reset akan dikirim ke email tersebut.
               </p>
 
               {resetFeedback.error ? <div className={styles.inlineError}>{resetFeedback.error}</div> : null}

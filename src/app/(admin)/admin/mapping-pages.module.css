@@ -100,6 +100,52 @@
   gap: 12px;
 }
 
+.periodRow {
+  display: grid;
+  grid-template-columns: 180px 24px minmax(240px, 480px);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.periodLabel {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f3b73;
+  letter-spacing: 0.06em;
+}
+
+.periodColon {
+  font-size: 20px;
+  color: #334155;
+  text-align: center;
+}
+
+.select {
+  min-height: 40px;
+}
+
+.statusControl {
+  width: 100%;
+  max-width: 480px;
+}
+
+.masterSearchRow {
+  margin-top: 0;
+}
+
+.masterSearchSelect {
+  min-width: 180px;
+}
+
+.masterSearchInput {
+  min-width: 0;
+}
+
+.masterSearchButton {
+  min-width: 140px;
+}
+
 .formGroup {
   display: flex;
   flex-direction: column;
@@ -351,6 +397,15 @@
 @media (max-width: 960px) {
   .pageHead {
     flex-direction: column;
+  }
+
+  .periodRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .periodColon {
+    display: none;
   }
 
   .filterGrid {

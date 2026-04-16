@@ -1,0 +1,302 @@
+"use client";
+
+/* eslint-disable @next/next/no-img-element */
+
+import type { BusinessUnitOption, DepartmentOption, DivisionOption } from "@/lib/org-hierarchy";
+import type { FunctionMaster } from "@/lib/master-data";
+import SurveyPreviewElement from "@/components/survey/survey-preview-element";
+import type { BuilderElement, BuilderPage } from "./builder-definitions";
+import styles from "./survey-create.module.css";
+
+type PreviewDevice = "desktop" | "mobile";
+
+interface SurveyPreviewScreenProps {
+  allBuilderElements: BuilderElement[];
+  logo: string;
+  mappedApplicationsByDepartment: string[];
+  mappedApplicationsByFunction: string[];
+  orgBusinessUnits: BusinessUnitOption[];
+  orgDepartments: DepartmentOption[];
+  orgDivisions: DivisionOption[];
+  orgFunctions: FunctionMaster[];
+  pages: BuilderPage[];
+  previewDevice: PreviewDevice;
+  previewValues: Record<string, unknown>;
+  surveyDesc: string;
+  surveyTitle: string;
+  setPreviewDevice: (device: PreviewDevice) => void;
+  setPreviewValue: (id: string, value: unknown) => void;
+  setPreviewValuesBulk: (nextValues: Record<string, unknown>) => void;
+  setShowPreview: (value: boolean) => void;
+  togglePreviewCheckbox: (id: string, option: string) => void;
+}
+
+function hasSelectedPreviewValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  return false;
+}
+
+function getMappedSelectionValues(
+  selector: BuilderElement | null,
+  values: Record<string, unknown>,
+): string[] {
+  if (!selector) return [];
+  const raw = values[selector.id];
+
+  if (Array.isArray(raw)) {
+    return Array.from(
+      new Set(raw.map((item) => String(item || "").trim()).filter(Boolean)),
+    );
+  }
+
+  if (typeof raw === "string" && raw.trim()) {
+    return [raw.trim()];
+  }
+
+  return [];
+}
+
+function toContextElementId(baseId: string, appName: string): string {
+  const safe = encodeURIComponent(appName.trim().toLowerCase());
+  return `${baseId}__app__${safe || "selected"}`;
+}
+
+function isConditionallyRequired(
+  element: BuilderElement,
+  values: Record<string, unknown>,
+): boolean {
+  if (!element.conditionalRequiredSourceId) return false;
+  const threshold = Math.min(
+    10,
+    Math.max(1, Math.round(Number(element.conditionalRequiredThreshold || 7))),
+  );
+  const sourceId = element.conditionalRequiredSourceId;
+  const directValue = Number(values[sourceId] || 0);
+
+  let sourceValue = Number.isFinite(directValue) && directValue > 0 ? directValue : 0;
+  if (sourceValue <= 0) {
+    const rowValues = Object.entries(values)
+      .filter(([key]) => key.startsWith(`${sourceId}-`))
+      .map(([, value]) => {
+        const text = String(value ?? "").trim();
+        const parsed = Number(text);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+        return null;
+      })
+      .filter((value): value is number => value !== null && value > 0);
+
+    if (rowValues.length > 0) {
+      sourceValue = rowValues.reduce((sum, current) => sum + current, 0) / rowValues.length;
+    }
+  }
+
+  if (!Number.isFinite(sourceValue) || sourceValue <= 0) return false;
+  return sourceValue < threshold;
+}
+
+export default function SurveyPreviewScreen({
+  allBuilderElements,
+  logo,
+  mappedApplicationsByDepartment,
+  mappedApplicationsByFunction,
+  orgBusinessUnits,
+  orgDepartments,
+  orgDivisions,
+  orgFunctions,
+  pages,
+  previewDevice,
+  previewValues,
+  surveyDesc,
+  surveyTitle,
+  setPreviewDevice,
+  setPreviewValue,
+  setPreviewValuesBulk,
+  setShowPreview,
+  togglePreviewCheckbox,
+}: SurveyPreviewScreenProps) {
+  return (
+    <div className={styles.previewScreen}>
+      <div className={styles.previewTopbar}>
+        <div>
+          <h2 className={styles.previewTitle}>Survey Preview</h2>
+          <div className={styles.previewSub}>Mode tampilan responden</div>
+        </div>
+        <div className={styles.previewDeviceTabs} role="tablist" aria-label="Preview device mode">
+          <button
+            type="button"
+            role="tab"
+            aria-label="Computer View"
+            aria-selected={previewDevice === "desktop"}
+            className={`${styles.previewDeviceTab} ${previewDevice === "desktop" ? styles.previewDeviceTabActive : ""}`}
+            onClick={() => setPreviewDevice("desktop")}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4.25 3h15.5A2.25 2.25 0 0 1 22 5.25v10.5A2.25 2.25 0 0 1 19.75 18h-4.25v2.5h1.75a.75.75 0 1 1 0 1.5H6.75a.75.75 0 1 1 0-1.5H8.5V18H4.25A2.25 2.25 0 0 1 2 15.75V5.25A2.25 2.25 0 0 1 4.25 3Zm5.75 17.5h4V18h-4v2.5Z" />
+            </svg>
+            <span>Computer</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-label="Mobile View"
+            aria-selected={previewDevice === "mobile"}
+            className={`${styles.previewDeviceTab} ${previewDevice === "mobile" ? styles.previewDeviceTabActive : ""}`}
+            onClick={() => setPreviewDevice("mobile")}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8.25 2h7.5A2.25 2.25 0 0 1 18 4.25v15.5A2.25 2.25 0 0 1 15.75 22h-7.5A2.25 2.25 0 0 1 6 19.75V4.25A2.25 2.25 0 0 1 8.25 2Zm0 1.5a.75.75 0 0 0-.75.75v15.5c0 .414.336.75.75.75h7.5a.75.75 0 0 0 .75-.75V4.25a.75.75 0 0 0-.75-.75h-7.5Z" />
+            </svg>
+            <span>Mobile</span>
+          </button>
+        </div>
+        <button className={styles.inlineButton} type="button" onClick={() => setShowPreview(false)}>Back to Form Builder</button>
+      </div>
+      <div className={styles.previewViewportWrap}>
+        <div
+          className={`${styles.previewViewport} ${
+            previewDevice === "mobile" ? styles.previewViewportMobile : styles.previewViewportDesktop
+          }`}
+        >
+          <div className={styles.previewFullBody}>
+            {logo ? (
+              <div className={styles.previewSurveyBrand}>
+                <img src={logo} alt="Survey logo" className={styles.previewSurveyLogo} />
+              </div>
+            ) : null}
+            <h3>{surveyTitle || "Survey Title"}</h3>
+            {surveyDesc.trim() ? <p>{surveyDesc}</p> : null}
+            {pages.map((page) => {
+              const mappedSelectorIndex = page.elements.findIndex(
+                (item) =>
+                  (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+                  (item.dataSource === "app_department" || item.dataSource === "app_function"),
+              );
+              const mappedSelector = mappedSelectorIndex >= 0 ? page.elements[mappedSelectorIndex] : null;
+              const selectedMappedApps = getMappedSelectionValues(mappedSelector, previewValues);
+              const beforeSelector = mappedSelectorIndex >= 0
+                ? page.elements.slice(0, mappedSelectorIndex + 1)
+                : page.elements;
+              const afterSelector = mappedSelectorIndex >= 0 ? page.elements.slice(mappedSelectorIndex + 1) : [];
+              const repeatableAfterSelector = afterSelector.filter(
+                (item) => item.displayCondition === "after_mapped_selection",
+              );
+              const alwaysVisibleAfterSelector = afterSelector.filter(
+                (item) => item.displayCondition !== "after_mapped_selection",
+              );
+
+              return (
+                <div key={`pv-${page.id}`} className={styles.previewPage}>
+                  <h4>{page.title}</h4>
+                  {beforeSelector.map((element, elementIndex) => {
+                    const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
+                    const effectiveElement = { ...element, required: effectiveRequired };
+                    return (
+                      <div key={`pve-base-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
+                        {effectiveElement.type !== "hero" && effectiveElement.title.trim()
+                          ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
+                          : null}
+                        {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                        <SurveyPreviewElement
+                          element={effectiveElement}
+                          allElements={allBuilderElements}
+                          values={previewValues}
+                          onSetValue={setPreviewValue}
+                          onSetValuesBulk={setPreviewValuesBulk}
+                          onToggleCheckbox={togglePreviewCheckbox}
+                          orgData={{
+                            businessUnits: orgBusinessUnits,
+                            divisions: orgDivisions,
+                            departments: orgDepartments,
+                            functions: orgFunctions,
+                            mappedApplicationsByDepartment,
+                            mappedApplicationsByFunction,
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {mappedSelector && repeatableAfterSelector.length > 0 && hasSelectedPreviewValue(previewValues[mappedSelector.id]) ? (
+                    selectedMappedApps.map((appName) => (
+                      <div key={`pve-app-group-${page.id}-${appName}`} className={styles.previewAppGroup}>
+                        <div className={styles.previewAppGroupTitle}>{appName}</div>
+                        {repeatableAfterSelector.map((element, elementIndex) => {
+                          const contextSourceId = element.conditionalRequiredSourceId
+                            ? toContextElementId(element.conditionalRequiredSourceId, appName)
+                            : undefined;
+                          const contextElement = {
+                            ...element,
+                            id: toContextElementId(element.id, appName),
+                            title: `${element.title || "Question"} (${appName})`,
+                            conditionalRequiredSourceId: contextSourceId,
+                          };
+                          const effectiveRequired = contextElement.required || isConditionallyRequired(contextElement, previewValues);
+                          const effectiveElement = { ...contextElement, required: effectiveRequired };
+                          return (
+                            <div key={`pve-app-${page.id}-${element.id}-${elementIndex}-${appName}`} className={styles.previewQuestion}>
+                              {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div> : null}
+                              {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                              <SurveyPreviewElement
+                                element={effectiveElement}
+                                allElements={allBuilderElements}
+                                values={previewValues}
+                                onSetValue={setPreviewValue}
+                                onSetValuesBulk={setPreviewValuesBulk}
+                                onToggleCheckbox={togglePreviewCheckbox}
+                                orgData={{
+                                  businessUnits: orgBusinessUnits,
+                                  divisions: orgDivisions,
+                                  departments: orgDepartments,
+                                  functions: orgFunctions,
+                                  mappedApplicationsByDepartment,
+                                  mappedApplicationsByFunction,
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))
+                  ) : null}
+
+                  {alwaysVisibleAfterSelector.map((element, elementIndex) => {
+                    const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
+                    const effectiveElement = { ...element, required: effectiveRequired };
+                    return (
+                      <div key={`pve-always-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
+                        {effectiveElement.type !== "hero" && effectiveElement.title.trim()
+                          ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
+                          : null}
+                        {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                        <SurveyPreviewElement
+                          element={effectiveElement}
+                          allElements={allBuilderElements}
+                          values={previewValues}
+                          onSetValue={setPreviewValue}
+                          onSetValuesBulk={setPreviewValuesBulk}
+                          onToggleCheckbox={togglePreviewCheckbox}
+                          orgData={{
+                            businessUnits: orgBusinessUnits,
+                            divisions: orgDivisions,
+                            departments: orgDepartments,
+                            functions: orgFunctions,
+                            mappedApplicationsByDepartment,
+                            mappedApplicationsByFunction,
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
