@@ -151,6 +151,41 @@ import styles from '@/app/(admin)/admin/page-mockup.module.css';
 - `≤ 768px`: Panel padding dikurangi, filter group menjadi flex wrap, modal grid menjadi 1 kolom.
 - `≤ 480px`: Filter toolbar menjadi kolom penuh, semua filter group stretch 100%.
 
+---
+
+## Admin Shell Layout (`admin-shell.module.css`)
+
+Komponen `AdminShell` adalah layout wrapper utama admin panel (header + sidebar + content area).
+
+### Struktur
+
+| Elemen | Class | Keterangan |
+|---|---|---|
+| Root | `root` | Full-height wrapper, background `#f3f4f6` |
+| Header | `header` | Sticky top bar, height 56px, z-index 50 |
+| Hamburger | `hamburger` | Tombol buka/tutup sidebar (mobile only) |
+| Logo | `logoLink` | Link logo di header |
+| User menu | `userWrap` | Dropdown user di kanan header |
+| Layout container | `container` | Flex row: sidebar + content |
+| Sidebar overlay | `sidebarOverlay` / `sidebarOverlayVisible` | Backdrop gelap saat sidebar terbuka di mobile |
+| Sidebar | `sidebar` | Nav panel kiri, lebar 224px |
+| Content | `content` | Area konten utama, padding 20px |
+
+### Responsive Behavior (≤ 768px)
+
+- Header menjadi `position: sticky` sehingga tetap terlihat saat scroll.
+- Tombol hamburger (`hamburger`) muncul di header.
+- Sidebar berpindah ke `position: fixed` dan tersembunyi di luar layar (`translateX(-100%)`).
+- Klik hamburger menambahkan class `sidebarOpen` → sidebar slide-in dari kiri.
+- Overlay (`sidebarOverlayVisible`) muncul di belakang sidebar; klik overlay menutup sidebar.
+- Content padding dikurangi menjadi 12px.
+
+### Animasi
+
+- Sidebar (desktop): `slideInSidebar` — fade + slide dari kiri, 260ms.
+- Content: `fadeInContent` — fade + slide dari bawah, 320ms.
+- Sidebar (mobile): CSS `transition: transform 0.25s ease` (animasi JS-driven, bukan keyframe).
+
 ### Legacy Aliases
 
 Class lama berikut tetap tersedia agar halaman yang sudah ada tidak rusak:

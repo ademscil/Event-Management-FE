@@ -18,6 +18,7 @@ export default function AdminShell({ children }: AdminShellProps) {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -41,6 +42,11 @@ export default function AdminShell({ children }: AdminShellProps) {
     };
   }, [pathname, router]);
 
+  // Close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
   if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">
@@ -54,10 +60,23 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   return (
     <div className={styles.root}>
-      <AdminHeader user={user} />
+      <AdminHeader user={user} onMenuToggle={() => setSidebarOpen((p) => !p)} />
 
       <div className={styles.container}>
-        {!hideSidebar ? <AdminSidebar menu={menu} pathname={pathname || ""} /> : null}
+        {!hideSidebar && sidebarOpen ? (
+          <div
+            className={`${styles.sidebarOverlay} ${styles.sidebarOverlayVisible}`}
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+        {!hideSidebar ? (
+          <AdminSidebar
+            menu={menu}
+            pathname={pathname || ""}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+          />
+        ) : null}
         <main className={styles.content}>{children}</main>
       </div>
     </div>

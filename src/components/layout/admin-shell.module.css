@@ -5,8 +5,12 @@
   font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* ── Header ── */
 .header {
-  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: 56px;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
@@ -15,6 +19,42 @@
   padding: 0 24px;
 }
 
+/* ── Hamburger (hidden on desktop) ── */
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.hamburger:hover {
+  background: #f3f4f6;
+}
+
+.hamburgerIcon {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 20px;
+}
+
+.hamburgerIcon span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: #374151;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+/* ── Logo ── */
 .logoLink {
   display: inline-flex;
   align-items: center;
@@ -29,6 +69,7 @@
   width: auto;
 }
 
+/* ── User menu ── */
 .userWrap {
   position: relative;
 }
@@ -74,20 +115,37 @@
   background: #f3f4f6;
 }
 
+/* ── Layout container ── */
 .container {
   display: flex;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 56px);
   min-width: 0;
 }
 
+/* ── Sidebar overlay (mobile backdrop) ── */
+.sidebarOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
+}
+
+.sidebarOverlayVisible {
+  display: block;
+}
+
+/* ── Sidebar ── */
 .sidebar {
-  width: 227px;
+  width: 224px;
+  flex-shrink: 0;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   padding: 16px 0;
   animation: slideInSidebar 260ms ease-out;
 }
 
+/* ── Menu ── */
 .menu {
   list-style: none;
   margin: 0;
@@ -101,7 +159,6 @@
   letter-spacing: 0.06em;
   padding: 12px 20px 6px;
 }
-
 
 .menuLink {
   margin: 2px 12px;
@@ -151,6 +208,7 @@
   transition: background-color 0.2s ease;
 }
 
+/* ── Menu icon variables ── */
 .menuDashboard {
   --menu-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2024%2024'%20fill%3D'none'%20stroke%3D'white'%20stroke-width%3D'2'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Crect%20x%3D'3'%20y%3D'3'%20width%3D'7'%20height%3D'7'%2F%3E%3Crect%20x%3D'14'%20y%3D'3'%20width%3D'7'%20height%3D'4'%2F%3E%3Crect%20x%3D'14'%20y%3D'11'%20width%3D'7'%20height%3D'10'%2F%3E%3Crect%20x%3D'3'%20y%3D'14'%20width%3D'7'%20height%3D'7'%2F%3E%3C%2Fsvg%3E");
 }
@@ -221,15 +279,17 @@
   --icon-border: #bfd8ff;
 }
 
+/* ── Content area ── */
 .content {
   min-width: 0;
   flex: 1;
-  padding: 24px;
+  padding: 20px;
   background: #f3f4f6;
   overflow-x: hidden;
   animation: fadeInContent 320ms ease-out;
 }
 
+/* ── Animations ── */
 @keyframes slideInSidebar {
   from {
     opacity: 0;
@@ -249,5 +309,34 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* ── Mobile (≤768px) ── */
+@media (max-width: 768px) {
+  .hamburger {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    bottom: 0;
+    z-index: 45;
+    width: 224px;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    animation: none;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.12);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .content {
+    padding: 12px;
   }
 }
