@@ -18,7 +18,7 @@ export type BusinessUnitMaster = {
 export type DivisionMaster = {
   DivisionId: string;
   BusinessUnitId: string;
-  Code: string;
+  Code: number;  // INT IDENTITY auto-increment
   Name: string;
   IsActive: boolean;
 };
@@ -26,21 +26,21 @@ export type DivisionMaster = {
 export type DepartmentMaster = {
   DepartmentId: string;
   DivisionId: string;
-  Code: string;
+  Code: number;  // INT IDENTITY auto-increment
   Name: string;
   IsActive: boolean;
 };
 
 export type FunctionMaster = {
   FunctionId: string;
-  Code: string;
+  Code: number;  // INT IDENTITY auto-increment
   Name: string;
   IsActive: boolean;
 };
 
 export type ApplicationMaster = {
   ApplicationId: string;
-  Code: string;
+  Code: number;  // INT IDENTITY auto-increment
   Name: string;
   Description?: string | null;
   IsActive: boolean;
@@ -130,7 +130,7 @@ export async function fetchDivisionsMaster(): Promise<ApiResult<DivisionMaster[]
   );
 }
 
-export async function createDivisionMaster(input: { businessUnitId: string; code: string; name: string }): Promise<ApiResult<DivisionMaster>> {
+export async function createDivisionMaster(input: { businessUnitId: string; name: string }): Promise<ApiResult<DivisionMaster>> {
   return authFetch(
     "/divisions",
     { method: "POST", body: JSON.stringify(input) },
@@ -139,7 +139,7 @@ export async function createDivisionMaster(input: { businessUnitId: string; code
   );
 }
 
-export async function updateDivisionMaster(id: string, input: Partial<{ businessUnitId: string; code: string; name: string; isActive: boolean }>): Promise<ApiResult<DivisionMaster>> {
+export async function updateDivisionMaster(id: string, input: Partial<{ businessUnitId: string; name: string; isActive: boolean }>): Promise<ApiResult<DivisionMaster>> {
   return authFetch(
     `/divisions/${id}`,
     { method: "PUT", body: JSON.stringify(input) },
@@ -157,7 +157,7 @@ export async function fetchDepartmentsMaster(): Promise<ApiResult<DepartmentMast
   );
 }
 
-export async function createDepartmentMaster(input: { divisionId: string; code: string; name: string }): Promise<ApiResult<DepartmentMaster>> {
+export async function createDepartmentMaster(input: { divisionId: string; name: string }): Promise<ApiResult<DepartmentMaster>> {
   return authFetch(
     "/departments",
     { method: "POST", body: JSON.stringify(input) },
@@ -166,7 +166,7 @@ export async function createDepartmentMaster(input: { divisionId: string; code: 
   );
 }
 
-export async function updateDepartmentMaster(id: string, input: Partial<{ divisionId: string; code: string; name: string; isActive: boolean }>): Promise<ApiResult<DepartmentMaster>> {
+export async function updateDepartmentMaster(id: string, input: Partial<{ divisionId: string; name: string; isActive: boolean }>): Promise<ApiResult<DepartmentMaster>> {
   return authFetch(
     `/departments/${id}`,
     { method: "PUT", body: JSON.stringify(input) },
@@ -184,7 +184,7 @@ export async function fetchFunctionsMaster(): Promise<ApiResult<FunctionMaster[]
   );
 }
 
-export async function createFunctionMaster(input: { code: string; name: string }): Promise<ApiResult<FunctionMaster>> {
+export async function createFunctionMaster(input: { name: string }): Promise<ApiResult<FunctionMaster>> {
   return authFetch(
     "/functions",
     { method: "POST", body: JSON.stringify(input) },
@@ -193,7 +193,7 @@ export async function createFunctionMaster(input: { code: string; name: string }
   );
 }
 
-export async function updateFunctionMaster(id: string, input: Partial<{ code: string; name: string; isActive: boolean }>): Promise<ApiResult<FunctionMaster>> {
+export async function updateFunctionMaster(id: string, input: Partial<{ name: string; isActive: boolean }>): Promise<ApiResult<FunctionMaster>> {
   return authFetch(
     `/functions/${id}`,
     { method: "PUT", body: JSON.stringify(input) },
@@ -211,7 +211,7 @@ export async function fetchApplicationsMaster(): Promise<ApiResult<ApplicationMa
   );
 }
 
-export async function createApplicationMaster(input: { code: string; name: string; description?: string }): Promise<ApiResult<ApplicationMaster>> {
+export async function createApplicationMaster(input: { name: string; description?: string }): Promise<ApiResult<ApplicationMaster>> {
   return authFetch(
     "/applications",
     { method: "POST", body: JSON.stringify(input) },
@@ -220,7 +220,7 @@ export async function createApplicationMaster(input: { code: string; name: strin
   );
 }
 
-export async function updateApplicationMaster(id: string, input: Partial<{ code: string; name: string; description: string; isActive: boolean }>): Promise<ApiResult<ApplicationMaster>> {
+export async function updateApplicationMaster(id: string, input: Partial<{ name: string; description: string; isActive: boolean }>): Promise<ApiResult<ApplicationMaster>> {
   return authFetch(
     `/applications/${id}`,
     { method: "PUT", body: JSON.stringify(input) },

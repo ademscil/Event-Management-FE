@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import { useState } from "react";
 import type { BusinessUnitOption, DepartmentOption, DivisionOption } from "@/lib/org-hierarchy";
 import type { FunctionMaster } from "@/lib/master-data";
 import SurveyPreviewElement from "@/components/survey/survey-preview-element";
@@ -118,6 +119,26 @@ export default function SurveyPreviewScreen({
   setShowPreview,
   togglePreviewCheckbox,
 }: SurveyPreviewScreenProps) {
+  const [currentPreviewPage, setCurrentPreviewPage] = useState(0);
+
+  // Build rendered pages — sama seperti public survey:
+  // page yang hanya HeroCover → welcome page (questions kosong)
+  // page lain → filter HeroCover, tampilkan sisanya
+  const renderedPages = pages.map((page) => {
+    const hasOnlyHero = page.elements.length > 0 && page.elements.every((el) => el.type === "hero");
+    if (hasOnlyHero) return { ...page, elements: [] };
+    return { ...page, elements: page.elements.filter((el) => el.type !== "hero") };
+  }).filter((page, index) => {
+    if (page.elements.length > 0) return true;
+    return index === 0; // pertahankan welcome page di index 0
+  });
+
+  const heroCoverEl = pages.flatMap((p) => p.elements).find((el) => el.type === "hero");
+  const heroImageUrl = heroCoverEl?.coverUrl || "";
+  const currentPage = renderedPages[currentPreviewPage] || null;
+  const totalPages = renderedPages.length;
+  const progressPercent = totalPages === 0 ? 0 : ((currentPreviewPage + 1) / totalPages) * 100;
+  const isWelcomePage = currentPage !== null && currentPage.elements.length === 0;
   return (
     <div className={styles.previewScreen}>
       <div className={styles.previewTopbar}>
@@ -162,138 +183,203 @@ export default function SurveyPreviewScreen({
           }`}
         >
           <div className={styles.previewFullBody}>
-            {logo ? (
-              <div className={styles.previewSurveyBrand}>
-                <img src={logo} alt="Survey logo" className={styles.previewSurveyLogo} />
+            {/* Survey card — mirip public survey */}
+            <div className={styles.previewSurveyCard}>
+              {/* Hero image */}
+              <div className={styles.previewHeroWrap}>
+                {heroImageUrl ? (
+                  <img src={heroImageUrl} alt="Hero" className={styles.previewHeroImg} />
+                ) : (
+                  <div className={styles.previewHeroPlaceholderBar} />
+                )}
               </div>
-            ) : null}
-            <h3>{surveyTitle || "Survey Title"}</h3>
-            {surveyDesc.trim() ? <p>{surveyDesc}</p> : null}
-            {pages.map((page) => {
-              const mappedSelectorIndex = page.elements.findIndex(
-                (item) =>
-                  (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
-                  (item.dataSource === "app_department" || item.dataSource === "app_function"),
-              );
-              const mappedSelector = mappedSelectorIndex >= 0 ? page.elements[mappedSelectorIndex] : null;
-              const selectedMappedApps = getMappedSelectionValues(mappedSelector, previewValues);
-              const beforeSelector = mappedSelectorIndex >= 0
-                ? page.elements.slice(0, mappedSelectorIndex + 1)
-                : page.elements;
-              const afterSelector = mappedSelectorIndex >= 0 ? page.elements.slice(mappedSelectorIndex + 1) : [];
-              const repeatableAfterSelector = afterSelector.filter(
-                (item) => item.displayCondition === "after_mapped_selection",
-              );
-              const alwaysVisibleAfterSelector = afterSelector.filter(
-                (item) => item.displayCondition !== "after_mapped_selection",
-              );
 
-              return (
-                <div key={`pv-${page.id}`} className={styles.previewPage}>
-                  <h4>{page.title}</h4>
-                  {beforeSelector.map((element, elementIndex) => {
-                    const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
-                    const effectiveElement = { ...element, required: effectiveRequired };
-                    return (
-                      <div key={`pve-base-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
-                        {effectiveElement.type !== "hero" && effectiveElement.title.trim()
-                          ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
-                          : null}
-                        {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
-                        <SurveyPreviewElement
-                          element={effectiveElement}
-                          allElements={allBuilderElements}
-                          values={previewValues}
-                          onSetValue={setPreviewValue}
-                          onSetValuesBulk={setPreviewValuesBulk}
-                          onToggleCheckbox={togglePreviewCheckbox}
-                          orgData={{
-                            businessUnits: orgBusinessUnits,
-                            divisions: orgDivisions,
-                            departments: orgDepartments,
-                            functions: orgFunctions,
-                            mappedApplicationsByDepartment,
-                            mappedApplicationsByFunction,
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
+              {/* Titlebar */}
+              <div className={styles.previewTitlebar}>
+                {surveyTitle || "Survey Title"}
+              </div>
 
-                  {mappedSelector && repeatableAfterSelector.length > 0 && hasSelectedPreviewValue(previewValues[mappedSelector.id]) ? (
-                    selectedMappedApps.map((appName) => (
-                      <div key={`pve-app-group-${page.id}-${appName}`} className={styles.previewAppGroup}>
-                        <div className={styles.previewAppGroupTitle}>{appName}</div>
-                        {repeatableAfterSelector.map((element, elementIndex) => {
-                          const contextSourceId = element.conditionalRequiredSourceId
-                            ? toContextElementId(element.conditionalRequiredSourceId, appName)
-                            : undefined;
-                          const contextElement = {
-                            ...element,
-                            id: toContextElementId(element.id, appName),
-                            title: `${element.title || "Question"} (${appName})`,
-                            conditionalRequiredSourceId: contextSourceId,
-                          };
-                          const effectiveRequired = contextElement.required || isConditionallyRequired(contextElement, previewValues);
-                          const effectiveElement = { ...contextElement, required: effectiveRequired };
-                          return (
-                            <div key={`pve-app-${page.id}-${element.id}-${elementIndex}-${appName}`} className={styles.previewQuestion}>
-                              {effectiveElement.type !== "hero" ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div> : null}
-                              {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
-                              <SurveyPreviewElement
-                                element={effectiveElement}
-                                allElements={allBuilderElements}
-                                values={previewValues}
-                                onSetValue={setPreviewValue}
-                                onSetValuesBulk={setPreviewValuesBulk}
-                                onToggleCheckbox={togglePreviewCheckbox}
-                                orgData={{
-                                  businessUnits: orgBusinessUnits,
-                                  divisions: orgDivisions,
-                                  departments: orgDepartments,
-                                  functions: orgFunctions,
-                                  mappedApplicationsByDepartment,
-                                  mappedApplicationsByFunction,
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
+              {/* Subbar */}
+              <div className={styles.previewSubbar}>
+                {!isWelcomePage && surveyDesc.trim() ? <span className={styles.previewSubbarText}>{surveyDesc}</span> : null}
+                <span className={`${styles.previewStatusBadge} ${styles.previewStatusActive}`}>Active</span>
+                {totalPages > 1 ? (
+                  <span style={{ fontSize: "11px", fontWeight: 600, opacity: 0.7 }}>
+                    Page {currentPreviewPage + 1} / {totalPages}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Body */}
+              <div className={styles.previewCardBody}>
+                {/* Progress bar */}
+                {totalPages > 1 ? (
+                  <div className={styles.previewProgressWrap}>
+                    <div className={styles.previewProgressTrack}>
+                      <div className={styles.previewProgressBar} style={{ width: `${progressPercent}%` }} />
+                    </div>
+                    <div className={styles.previewProgressMeta}>{Math.round(progressPercent)}% selesai</div>
+                  </div>
+                ) : null}
+
+                {/* Current page content */}
+                {currentPage && !isWelcomePage ? (
+                  <div className={styles.previewPage}>
+                    <h4>{currentPage.title}</h4>
+                    {(() => {
+                      const page = currentPage;
+                      const mappedSelectorIndex = page.elements.findIndex(
+                        (item) =>
+                          (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+                          (item.dataSource === "app_department" || item.dataSource === "app_function"),
+                      );
+                      const mappedSelector = mappedSelectorIndex >= 0 ? page.elements[mappedSelectorIndex] : null;
+                      const selectedMappedApps = getMappedSelectionValues(mappedSelector, previewValues);
+                      const beforeSelector = mappedSelectorIndex >= 0
+                        ? page.elements.slice(0, mappedSelectorIndex + 1)
+                        : page.elements;
+                      const afterSelector = mappedSelectorIndex >= 0 ? page.elements.slice(mappedSelectorIndex + 1) : [];
+                      const repeatableAfterSelector = afterSelector.filter(
+                        (item) => item.displayCondition === "after_mapped_selection",
+                      );
+                      const alwaysVisibleAfterSelector = afterSelector.filter(
+                        (item) => item.displayCondition !== "after_mapped_selection",
+                      );
+
+                      return (
+                        <>
+                          {beforeSelector.map((element, elementIndex) => {
+                            const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
+                            const effectiveElement = { ...element, required: effectiveRequired };
+                            return (
+                              <div key={`pve-base-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
+                                {effectiveElement.title.trim()
+                                  ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span> : null}</div>
+                                  : null}
+                                {effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                <SurveyPreviewElement
+                                  element={effectiveElement}
+                                  allElements={allBuilderElements}
+                                  values={previewValues}
+                                  onSetValue={setPreviewValue}
+                                  onSetValuesBulk={setPreviewValuesBulk}
+                                  onToggleCheckbox={togglePreviewCheckbox}
+                                  orgData={{
+                                    businessUnits: orgBusinessUnits,
+                                    divisions: orgDivisions,
+                                    departments: orgDepartments,
+                                    functions: orgFunctions,
+                                    mappedApplicationsByDepartment,
+                                    mappedApplicationsByFunction,
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+
+                          {mappedSelector && repeatableAfterSelector.length > 0 && hasSelectedPreviewValue(previewValues[mappedSelector.id]) ? (
+                            selectedMappedApps.map((appName) => (
+                              <div key={`pve-app-group-${page.id}-${appName}`} className={styles.previewAppGroup}>
+                                <div className={styles.previewAppGroupTitle}>{appName}</div>
+                                {repeatableAfterSelector.map((element, elementIndex) => {
+                                  const contextSourceId = element.conditionalRequiredSourceId
+                                    ? toContextElementId(element.conditionalRequiredSourceId, appName)
+                                    : undefined;
+                                  const contextElement = {
+                                    ...element,
+                                    id: toContextElementId(element.id, appName),
+                                    title: `${element.title || "Question"} (${appName})`,
+                                    conditionalRequiredSourceId: contextSourceId,
+                                  };
+                                  const effectiveRequired = contextElement.required || isConditionallyRequired(contextElement, previewValues);
+                                  const effectiveElement = { ...contextElement, required: effectiveRequired };
+                                  return (
+                                    <div key={`pve-app-${page.id}-${element.id}-${elementIndex}-${appName}`} className={styles.previewQuestion}>
+                                      {effectiveElement.title.trim() ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span> : null}</div> : null}
+                                      {effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                      <SurveyPreviewElement
+                                        element={effectiveElement}
+                                        allElements={allBuilderElements}
+                                        values={previewValues}
+                                        onSetValue={setPreviewValue}
+                                        onSetValuesBulk={setPreviewValuesBulk}
+                                        onToggleCheckbox={togglePreviewCheckbox}
+                                        orgData={{
+                                          businessUnits: orgBusinessUnits,
+                                          divisions: orgDivisions,
+                                          departments: orgDepartments,
+                                          functions: orgFunctions,
+                                          mappedApplicationsByDepartment,
+                                          mappedApplicationsByFunction,
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ))
+                          ) : null}
+
+                          {alwaysVisibleAfterSelector.map((element, elementIndex) => {
+                            const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
+                            const effectiveElement = { ...element, required: effectiveRequired };
+                            return (
+                              <div key={`pve-always-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
+                                {effectiveElement.title.trim()
+                                  ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? <span style={{ color: "#ef4444", marginLeft: 2 }}>*</span> : null}</div>
+                                  : null}
+                                {effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
+                                <SurveyPreviewElement
+                                  element={effectiveElement}
+                                  allElements={allBuilderElements}
+                                  values={previewValues}
+                                  onSetValue={setPreviewValue}
+                                  onSetValuesBulk={setPreviewValuesBulk}
+                                  onToggleCheckbox={togglePreviewCheckbox}
+                                  orgData={{
+                                    businessUnits: orgBusinessUnits,
+                                    divisions: orgDivisions,
+                                    departments: orgDepartments,
+                                    functions: orgFunctions,
+                                    mappedApplicationsByDepartment,
+                                    mappedApplicationsByFunction,
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : null}
+
+                {/* Nav */}
+                <div className={`${styles.previewNav} ${isWelcomePage ? styles.previewNavCenter : ""}`}>
+                  {!isWelcomePage ? (
+                    <button
+                      type="button"
+                      className={styles.previewBtnGhost}
+                      disabled={currentPreviewPage === 0}
+                      onClick={() => setCurrentPreviewPage((prev) => Math.max(0, prev - 1))}
+                    >
+                      Prev
+                    </button>
                   ) : null}
-
-                  {alwaysVisibleAfterSelector.map((element, elementIndex) => {
-                    const effectiveRequired = element.required || isConditionallyRequired(element, previewValues);
-                    const effectiveElement = { ...element, required: effectiveRequired };
-                    return (
-                      <div key={`pve-always-${page.id}-${element.id}-${elementIndex}`} className={styles.previewQuestion}>
-                        {effectiveElement.type !== "hero" && effectiveElement.title.trim()
-                          ? <div className={styles.previewLabel}>{effectiveElement.title}{effectiveElement.required ? " *" : ""}</div>
-                          : null}
-                        {effectiveElement.type !== "hero" && effectiveElement.subtitle ? <small>{effectiveElement.subtitle}</small> : null}
-                        <SurveyPreviewElement
-                          element={effectiveElement}
-                          allElements={allBuilderElements}
-                          values={previewValues}
-                          onSetValue={setPreviewValue}
-                          onSetValuesBulk={setPreviewValuesBulk}
-                          onToggleCheckbox={togglePreviewCheckbox}
-                          orgData={{
-                            businessUnits: orgBusinessUnits,
-                            divisions: orgDivisions,
-                            departments: orgDepartments,
-                            functions: orgFunctions,
-                            mappedApplicationsByDepartment,
-                            mappedApplicationsByFunction,
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
+                  {currentPreviewPage === totalPages - 1 ? (
+                    <button type="button" className={styles.previewBtn}>Submit</button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.previewBtn}
+                      onClick={() => setCurrentPreviewPage((prev) => Math.min(totalPages - 1, prev + 1))}
+                    >
+                      Next
+                    </button>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            </div>
           </div>
         </div>
       </div>

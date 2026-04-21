@@ -8,7 +8,7 @@ import {
   type ReportSelectionItem,
 } from "@/lib/reports";
 import type { UserRole } from "@/types/auth";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import styles from "./report-detail.module.css";
 import {
@@ -18,7 +18,6 @@ import {
   normalizeRole,
   resolveReportTitle,
   safeLabel,
-  subscribeToClientReady,
   toNumber,
 } from "./report-detail-utils";
 
@@ -66,13 +65,10 @@ export default function ReportDetailPage() {
   const printMode = searchParams.get("print") === "pdf";
   const autoPrint = searchParams.get("autoprint") === "1";
 
-  const isClientReady = useSyncExternalStore(
-    subscribeToClientReady,
-    () => true,
-    () => false
-  );
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
 
-  const role: UserRole | null = isClientReady ? getCurrentUser()?.role ?? null : null;
+  const role: UserRole | null = isMounted ? getCurrentUser()?.role ?? null : null;
   const normalizedRole = normalizeRole(String(role || ""));
   const isSuperAdmin = normalizedRole === "superadmin";
   const isAdminEvent = normalizedRole === "adminevent";
@@ -87,7 +83,7 @@ export default function ReportDetailPage() {
   const [hasAutoPrinted, setHasAutoPrinted] = useState(false);
 
   useEffect(() => {
-    if (!isClientReady || !canAccess) {
+    if (!isMounted || !canAccess) {
       return;
     }
 
@@ -149,7 +145,7 @@ export default function ReportDetailPage() {
     return () => {
       active = false;
     };
-  }, [canAccess, isClientReady, surveyId]);
+  }, [canAccess, isMounted, surveyId]);
 
   useEffect(() => {
     if (!printMode || !autoPrint || hasAutoPrinted || loading || error || !report) {
@@ -215,9 +211,6 @@ export default function ReportDetailPage() {
   }, [numericRows, report]);
 
   const yearlyScores = useMemo(() => {
-    if (!numericRows.length) {
-      return [2023, 2024, 2025].map((year) => ({ year, score: null })) as YearRow[];
-    }
     const bucket = new Map<number, number[]>();
     numericRows.forEach((row) => {
       const date = new Date(row.SubmittedAt || "");
@@ -227,7 +220,15 @@ export default function ReportDetailPage() {
       const values = bucket.get(year);
       if (values) values.push(row.score);
     });
-    return [2023, 2024, 2025].map((year) => {
+
+    // Get all years from data, fallback to last 3 years if no data
+    const dataYears = [...bucket.keys()].sort();
+    const currentYear = new Date().getFullYear();
+    const displayYears = dataYears.length > 0
+      ? dataYears.slice(-3)
+      : [currentYear - 2, currentYear - 1, currentYear];
+
+    return displayYears.map((year) => {
       const values = bucket.get(year) || [];
       return { year, score: values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null };
     });
@@ -359,18 +360,19 @@ export default function ReportDetailPage() {
   }, [appScores, respondentByBu]);
 
   const percentChange = useMemo(() => {
-    const y2023 = yearlyScores.find((item) => item.year === 2023)?.score;
-    const y2025 = yearlyScores.find((item) => item.year === 2025)?.score;
-    if (y2023 === null || y2023 === undefined || y2023 === 0 || y2025 === null || y2025 === undefined) return "";
-    const value = ((y2025 - y2023) / y2023) * 100;
-    return `${value.toFixed(2)}%`;
+    if (yearlyScores.length < 2) return "";
+    const first = yearlyScores[0]?.score;
+    const last = yearlyScores[yearlyScores.length - 1]?.score;
+    if (first === null || first === undefined || first === 0 || last === null || last === undefined) return "";
+    const value = ((last - first) / first) * 100;
+    return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
   }, [yearlyScores]);
 
-  if (!isClientReady) {
+  if (!isMounted) {
     return (
       <section className={`${styles.pageShell} ${printMode ? styles.printMode : ""}`}>
         <div className={styles.pageFrame}>
-          <h1 className={styles.titleBanner}>Loading report...</h1>
+          <h1 className={styles.titleBanner}>Memuat report...</h1>
         </div>
       </section>
     );
@@ -390,7 +392,7 @@ export default function ReportDetailPage() {
       <section className={styles.pageShell}>
         <div className={styles.pageFrame}>
           <h1 className={styles.titleBanner}>
-            The final result {resolveReportTitle(report?.survey?.title, surveyItem)} represents.
+            {resolveReportTitle(report?.survey?.title, surveyItem)}
           </h1>
 
           {loading ? <p className={styles.loadingText}>Memuat report detail...</p> : null}
@@ -455,18 +457,18 @@ export default function ReportDetailPage() {
                       <thead>
                         <tr>
                           <th>Score</th>
-                          <th>2023</th>
-                          <th>2024</th>
-                          <th>2025</th>
+                          {yearlyScores.map((item) => (
+                            <th key={`year-head-${item.year}`}>{item.year}</th>
+                          ))}
                           <th>% Change</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr>
                           <td>Target</td>
-                          <td>{fmtScore(yearlyScores.find((item) => item.year === 2023)?.score)}</td>
-                          <td>{fmtScore(yearlyScores.find((item) => item.year === 2024)?.score)}</td>
-                          <td>{fmtScore(yearlyScores.find((item) => item.year === 2025)?.score)}</td>
+                          {yearlyScores.map((item) => (
+                            <td key={`year-val-${item.year}`}>{fmtScore(item.score)}</td>
+                          ))}
                           <td>{percentChange}</td>
                         </tr>
                       </tbody>

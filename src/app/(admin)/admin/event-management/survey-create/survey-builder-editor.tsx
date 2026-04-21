@@ -134,7 +134,10 @@ export default function SurveyBuilderEditor({
       <main className={styles.builderMain} style={{ backgroundColor: bgColor, backgroundImage: bgImage ? `url(${bgImage})` : "none", fontFamily: FONT_MAP[font] }}>
         <div className={styles.canvas}>
           <div className={styles.topbar}>
-            <div className={styles.topLeft}><div className={styles.topTitle}>Survey Builder</div><div className={styles.topSub}>{scheduleSummary}</div></div>
+            <div className={styles.topLeft}>
+              <div className={styles.topTitle}>Survey Builder</div>
+              <div className={styles.topSub}>{scheduleSummary}</div>
+            </div>
             <div className={styles.topCenter}>
               <div className={styles.targetCard}>
                 <div className={styles.targetTitle}>Target Survey</div>
@@ -150,28 +153,25 @@ export default function SurveyBuilderEditor({
             </div>
           </div>
 
-          <div className={styles.brandPreview}>
-            <div className={styles.brandLogo}>{logo ? <img src={logo} alt="Logo" /> : <span>Your Logo</span>}</div>
-            <div>
-              <div className={styles.brandLabel}>{heroTitle || surveyTitle || "Survey Hero Title"}</div>
-              <div className={styles.brandText}>
-                {heroSubtitle || sanitizeSurveyDescription(surveyDesc) || brandStyleSummary}
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.surveyCard}>
-            <input className={styles.surveyTitle} placeholder="Survey Title" value={surveyTitle} onChange={(e)=>setSurveyTitle(e.target.value)} />
-            <input className={styles.surveyDesc} placeholder="Survey description" value={surveyDesc} onChange={(e)=>setSurveyDesc(sanitizeSurveyDescription(e.target.value))} />
-          </div>
-
           <div className={styles.pagesWrap}>
             {pages.length === 0 ? <div className={styles.emptyPage}>No pages yet. Use Add Page to get started.</div> : null}
 
-            {pages.map((page) => (
+            {pages.map((page) => {
+              // Cek apakah page ini hanya berisi HeroCover
+              const isHeroCoverOnlyPage = page.elements.length > 0 && page.elements.every((el) => el.type === "hero");
+
+              return (
               <article key={page.id} className={[styles.pageCard, draggingPageId === page.id ? styles.pageCardDragging : "", dragOverPageId === page.id && draggingPageId !== page.id ? styles.pageCardDragOver : ""].join(" ")} onDragOver={onPageDragOver(page.id)} onDrop={onPageDrop(page.id)}>
                 <div className={styles.pageHeader}>
-                  <div className={styles.pageTitleWrap}><span className={styles.drag} draggable onDragStart={onPageDragStart(page.id)} onDragEnd={onPageDragEnd} aria-label="Drag page">{"\u2630"}</span><input value={page.title} onChange={(e)=>setPages((prev)=>prev.map((p)=>p.id===page.id?{...p,title:e.target.value}:p))} className={styles.pageTitleInput} /></div>
+                  <div className={styles.pageTitleWrap}>
+                    <span className={styles.drag} draggable onDragStart={onPageDragStart(page.id)} onDragEnd={onPageDragEnd} aria-label="Drag page">{"\u2630"}</span>
+                    <input
+                      value={page.title}
+                      onChange={(e) => setPages((prev) => prev.map((p) => p.id === page.id ? { ...p, title: e.target.value } : p))}
+                      className={styles.pageTitleInput}
+                      placeholder=""
+                    />
+                  </div>
                   <button className={styles.inlineButton} type="button" onClick={() => removePage(page.id)}>Delete Page</button>
                 </div>
 
@@ -287,14 +287,44 @@ export default function SurveyBuilderEditor({
                     {(["likert", "matrix"] as ElementType[]).includes(el.type) ? (
                       <div className={styles.optionList}>
                         {el.type === "likert" ? (
-                          <div className={styles.optionRow}>
-                            <label style={{ fontSize: "12px", color: "#374151", minWidth: "120px" }}>Rating Scale</label>
-                            <input
-                              type="number" min={1} max={10}
-                              value={el.ratingScale ?? 10}
-                              onChange={(e) => setPages((prev) => prev.map((p) => p.id === page.id ? { ...p, elements: p.elements.map((item) => item.id === el.id ? { ...item, ratingScale: Math.min(10, Math.max(1, Number(e.target.value || 10))) } : item) } : p))}
-                            />
-                          </div>
+                          <>
+                            <div className={styles.optionRow}>
+                              <label style={{ fontSize: "12px", color: "#374151", minWidth: "120px" }}>Rating Scale</label>
+                              <input
+                                type="number" min={1} max={10}
+                                value={el.ratingScale ?? 10}
+                                onChange={(e) => setPages((prev) => prev.map((p) => p.id === page.id ? { ...p, elements: p.elements.map((item) => item.id === el.id ? { ...item, ratingScale: Math.min(10, Math.max(1, Number(e.target.value || 10))) } : item) } : p))}
+                              />
+                            </div>
+                            <div className={styles.optionRow}>
+                              <label style={{ fontSize: "12px", color: "#374151", minWidth: "120px" }}>
+                                Komentar per Statement
+                              </label>
+                              <label className={styles.settingCheckLabel} style={{ minHeight: "auto" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={el.likertEnableComment !== false}
+                                  onChange={(e) => setPages((prev) => prev.map((p) => p.id === page.id ? { ...p, elements: p.elements.map((item) => item.id === el.id ? { ...item, likertEnableComment: e.target.checked } : item) } : p))}
+                                />
+                                Tampilkan textbox komentar di bawah setiap statement
+                              </label>
+                            </div>
+                            {el.likertEnableComment !== false ? (
+                              <div className={styles.optionRow}>
+                                <label style={{ fontSize: "12px", color: "#374151", minWidth: "120px" }}>
+                                  Komentar Wajib jika Nilai &lt;
+                                </label>
+                                <input
+                                  type="number" min={1} max={10}
+                                  value={el.likertCommentThreshold ?? 7}
+                                  onChange={(e) => setPages((prev) => prev.map((p) => p.id === page.id ? { ...p, elements: p.elements.map((item) => item.id === el.id ? { ...item, likertCommentThreshold: Math.min(10, Math.max(1, Number(e.target.value || 7))) } : item) } : p))}
+                                />
+                                <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: 4 }}>
+                                  (1–10, default 7)
+                                </span>
+                              </div>
+                            ) : null}
+                          </>
                         ) : null}
                         {el.options.map((opt, idx) => (
                           <div key={`${el.id}-${idx}`} className={styles.optionRow}>
@@ -366,7 +396,7 @@ export default function SurveyBuilderEditor({
 
                 <div className={styles.addElement}><select defaultValue="" onChange={(e)=>{const value=e.target.value as ElementType; if(!value)return; addElement(page.id,value); e.target.value="";}}><option value="">+ Add Element</option>{ELEMENTS.map((item)=><option key={`${page.id}-${item.type}`} value={item.type}>{item.label}</option>)}</select></div>
               </article>
-            ))}
+            )})}
 
             <button className={styles.addPage} type="button" onClick={addPage}>+ Add Page</button>
           </div>

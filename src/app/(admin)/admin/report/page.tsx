@@ -355,35 +355,32 @@ export default function ReportSelectionPage() {
           <h2 className={baseStyles.panelTitle}>Daftar Event</h2>
           <span className={baseStyles.meta}>Terakhir diperbarui: {lastUpdatedText}</span>
         </div>
-        <div className={baseStyles.periodRow}>
-          <div className={baseStyles.periodLabel}>STATUS</div>
-          <div className={baseStyles.periodColon}>:</div>
-          <Dropdown
-            className={`${baseStyles.select} ${baseStyles.statusControl}`}
-            options={eventStatusOptions}
-            value={eventStatusFilter}
-            onChange={setEventStatusFilter}
+        <div className={baseStyles.filterToolbar}>
+          <div className={`${baseStyles.filterGroup} ${baseStyles.filterGroupMd}`}>
+            <label className={baseStyles.filterLabel}>Status</label>
+            <Dropdown
+              className={baseStyles.filterControl}
+              fullWidth
+              options={eventStatusOptions}
+              value={eventStatusFilter}
+              onChange={setEventStatusFilter}
+            />
+          </div>
+          <SearchBar
+            options={searchByOptions}
+            selectedValue={searchBy}
+            keyword={surveySearch}
+            onSelectedValueChange={setSearchBy}
+            onKeywordChange={setSurveySearch}
+            onButtonClick={onApplySearch}
+            placeholder={
+              searchBy === "event" ? "Cari nama event..." :
+              searchBy === "period" ? "Cari periode..." :
+              searchBy === "respondent" ? "Cari responden..." :
+              "Cari event..."
+            }
           />
         </div>
-
-        <SearchBar
-          rowClassName={baseStyles.masterSearchRow}
-          selectClassName={baseStyles.masterSearchSelect}
-          inputClassName={`${baseStyles.input} ${baseStyles.masterSearchInput}`}
-          buttonClassName={baseStyles.masterSearchButton}
-          options={searchByOptions}
-          selectedValue={searchBy}
-          keyword={surveySearch}
-          onSelectedValueChange={setSearchBy}
-          onKeywordChange={setSurveySearch}
-          onButtonClick={onApplySearch}
-          placeholder={
-            searchBy === "event" ? "search event name ..." :
-            searchBy === "period" ? "search event period ..." :
-            searchBy === "respondent" ? "search respondent count ..." :
-            "search here ..."
-          }
-        />
 
         <div className={styles.statusRegion} aria-live="polite">
           {loading ? <p className={baseStyles.meta}>Memuat event report...</p> : null}
@@ -600,7 +597,7 @@ export default function ReportSelectionPage() {
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Generate Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Generate report untuk &quot;{modal.survey.title}&quot; sekarang?</p>
@@ -616,7 +613,7 @@ export default function ReportSelectionPage() {
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}><strong>Pertanyaan:</strong> {modal.row.questionText}</p>
@@ -632,7 +629,7 @@ export default function ReportSelectionPage() {
               <>
                 <header className={styles.modalHeader}>
                   <h3 className={styles.modalTitle}>Export Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">x</button>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Survey: {modal.survey.title}</p>

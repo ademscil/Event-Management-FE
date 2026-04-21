@@ -28,9 +28,8 @@ type DivisionRow = DivisionMaster & { businessUnitName: string };
 function matchesSearch(item: DivisionRow, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterDivisiPage() {
@@ -51,7 +50,6 @@ export default function MasterDivisiPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<DivisionMaster | null>(null);
   const [businessUnitId, setBusinessUnitId] = useState("");
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState("Active");
   const [submitting, setSubmitting] = useState(false);
@@ -125,7 +123,6 @@ export default function MasterDivisiPage() {
   const openCreate = () => {
     setEditing(null);
     setBusinessUnitId("");
-    setCode("");
     setName("");
     setActive("Active");
     setShowModal(true);
@@ -134,7 +131,6 @@ export default function MasterDivisiPage() {
   const openEdit = (row: DivisionRow) => {
     setEditing(row);
     setBusinessUnitId(row.BusinessUnitId || "");
-    setCode(row.Code || "");
     setName(row.Name || "");
     setActive(row.IsActive ? "Active" : "Inactive");
     setShowModal(true);
@@ -147,8 +143,8 @@ export default function MasterDivisiPage() {
   };
 
   const onSubmit = async () => {
-    if (!businessUnitId || !code.trim() || !name.trim()) {
-      showFeedback("BU, Divisi Code, dan Divisi Name wajib diisi.", "Validasi");
+    if (!businessUnitId || !name.trim()) {
+      showFeedback("BU dan Divisi Name wajib diisi.", "Validasi");
       return;
     }
 
@@ -156,7 +152,6 @@ export default function MasterDivisiPage() {
     if (!editing) {
       const result = await createDivisionMaster({
         businessUnitId,
-        code: code.trim(),
         name: name.trim(),
       });
       setSubmitting(false);
@@ -171,7 +166,6 @@ export default function MasterDivisiPage() {
 
     const result = await updateDivisionMaster(editing.DivisionId, {
       businessUnitId,
-      code: code.trim(),
       name: name.trim(),
       isActive: active === "Active",
     });
@@ -288,38 +282,35 @@ export default function MasterDivisiPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>BU</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
-              value={buFilter}
-              onChange={setBuFilter}
-            />
-          </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>BU</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
+                value={buFilter}
+                onChange={setBuFilter}
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -346,8 +337,8 @@ export default function MasterDivisiPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
+                    <th>No.</th>
                     <th>BU</th>
-                    <th>Divisi Code</th>
                     <th>Divisi Name</th>
                     <th>Status</th>
                     <th>Aksi</th>
@@ -359,10 +350,10 @@ export default function MasterDivisiPage() {
                       <td colSpan={5}>Tidak ada data divisi</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.DivisionId}>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.businessUnitName}</td>
-                        <td>{item.Code}</td>
                         <td>{item.Name}</td>
                         <td>
                           <span className={`${styles.badge} ${item.IsActive ? styles.badgeActive : styles.badgeClosed}`}>
@@ -407,7 +398,7 @@ export default function MasterDivisiPage() {
           <span className={styles.meta}>Unggah data master divisi dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-divisi-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -431,7 +422,7 @@ export default function MasterDivisiPage() {
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom: BU Name, Divisi Code, Divisi Name, Status. Download template untuk format yang benar.
+          Format file: Excel (.xlsx/.xls). Kolom: BU Name, Divisi Name, Status. Download template untuk format yang benar.
         </div>
       </section>
 
@@ -453,12 +444,8 @@ export default function MasterDivisiPage() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Divisi Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. ITD" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Divisi Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
+                <label className={styles.label} htmlFor="master-divisi-name-input">Divisi Name</label>
+                <input id="master-divisi-name-input" name="divisiName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>

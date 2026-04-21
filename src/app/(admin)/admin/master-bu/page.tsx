@@ -183,7 +183,6 @@ export default function MasterBUPage() {
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     setUploadFileName(file?.name || "No file chosen");
-    setUploadInfo("");
   };
 
   const onDownloadTemplate = () => {
@@ -218,7 +217,6 @@ export default function MasterBUPage() {
         return;
       }
       setUploadLoading(true);
-      setUploadInfo("");
       const result = await uploadBusinessUnitFile(file);
       setUploadLoading(false);
       if (!result.success) {
@@ -259,25 +257,23 @@ export default function MasterBUPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
               { value: "name", label: "Name" },
@@ -365,7 +361,7 @@ export default function MasterBUPage() {
           <span className={styles.meta}>Unggah data master BU dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-bu-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -402,8 +398,8 @@ export default function MasterBUPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>BU Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Corporate HO" />
+                <label className={styles.label} htmlFor="master-bu-name-input">BU Name</label>
+                <input id="master-bu-name-input" name="buName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Corporate HO" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>

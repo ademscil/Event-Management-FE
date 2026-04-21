@@ -128,8 +128,17 @@ function normalizeQuestion(question: PublicQuestion): PreviewElement {
     conditionalRequiredSourceId: typeof conditionalRequired.sourceElementId === "string"
       ? String(conditionalRequired.sourceElementId)
       : undefined,
-    conditionalRequiredThreshold: Number.isFinite(Number(conditionalRequired.threshold))
-      ? Number(conditionalRequired.threshold)
+    conditionalRequiredThreshold: (() => {
+      // Untuk likert: baca commentThreshold dari options
+      if (type === "likert" && Number.isFinite(Number(options.commentThreshold))) {
+        return Number(options.commentThreshold);
+      }
+      return Number.isFinite(Number(conditionalRequired.threshold))
+        ? Number(conditionalRequired.threshold)
+        : undefined;
+    })(),
+    likertEnableComment: type === "likert"
+      ? (options.enableComment === false ? false : true)
       : undefined,
   };
 }
@@ -159,10 +168,38 @@ function getRenderedPageGroups(form: PublicSurveyForm | null): PageGroup[] {
     return [{
       pageNumber: 1,
       title: form.title || "Survey Form",
-      questions: groups.flatMap((group) => group.questions),
+      // Filter out HeroCover — sudah ditampilkan di layout header
+      questions: groups.flatMap((group) => group.questions).filter((q) => q.type !== "HeroCover"),
     }];
   }
-  return groups;
+
+  // Untuk multi-page:
+  // - Page yang HANYA berisi HeroCover → tetap tampil sebagai welcome page (questions kosong)
+  // - Page yang berisi HeroCover + question lain → filter HeroCover, tampilkan sisanya
+  // - Page yang tidak berisi HeroCover → tampil normal
+  const processedGroups = groups.map((group) => {
+    const hasOnlyHeroCover =
+      group.questions.length > 0 &&
+      group.questions.every((q) => q.type === "HeroCover");
+
+    if (hasOnlyHeroCover) {
+      // Welcome page — kosongkan questions, hero image sudah di layout header
+      return { ...group, questions: [] };
+    }
+
+    // Filter HeroCover dari page yang punya question lain
+    return {
+      ...group,
+      questions: group.questions.filter((q) => q.type !== "HeroCover"),
+    };
+  });
+
+  // Hapus page yang jadi kosong KECUALI welcome page (page pertama yang memang kosong)
+  return processedGroups.filter((group, index) => {
+    if (group.questions.length > 0) return true;
+    // Pertahankan page kosong hanya jika itu adalah page pertama (welcome)
+    return index === 0;
+  });
 }
 
 function buildRenderedQuestionsForPage(page: PageGroup | null, values: Record<string, unknown>): RenderedQuestion[] {
@@ -170,7 +207,9 @@ function buildRenderedQuestionsForPage(page: PageGroup | null, values: Record<st
 
   const normalizedElements = page.questions.map(normalizeQuestion);
   const mappedSelectorIndex = normalizedElements.findIndex(
-    (item) => item.dataSource === "app_department" || item.dataSource === "app_function",
+    (item) =>
+      (item.type === "choice" || item.type === "checkbox" || item.type === "dropdown") &&
+      (item.dataSource === "app_department" || item.dataSource === "app_function"),
   );
   const mappedSelector = mappedSelectorIndex >= 0 ? normalizedElements[mappedSelectorIndex] : null;
   const selectedMappedApps = getMappedSelectionValues(mappedSelector, values);
@@ -190,21 +229,50 @@ function buildRenderedQuestionsForPage(page: PageGroup | null, values: Record<st
     return baseQuestions;
   }
 
-  const repeatedQuestions = selectedMappedApps.flatMap((appName) =>
-    repeatableAfterSelector.map((element) => ({
-      element: {
-        ...element,
-        id: toContextElementId(element.id, appName),
-        title: `${element.title || "Question"} (${appName})`,
-        conditionalRequiredSourceId: element.conditionalRequiredSourceId
-          ? toContextElementId(element.conditionalRequiredSourceId, appName)
-          : undefined,
-      },
-      sourceQuestion: questionMap.get(element.id) as PublicQuestion,
-      applicationName: appName,
-      baseQuestionId: element.id,
-    })),
-  );
+  const repeatedQuestions = selectedMappedApps.flatMap((appName) => {
+    // Buat map: baseId likert → contextId per app ini, untuk auto-link komentar
+    const likertContextIdByBaseId = new Map<string, string>();
+    repeatableAfterSelector.forEach((el) => {
+      if (el.type === "likert" || el.type === "rating") {
+        likertContextIdByBaseId.set(el.id, toContextElementId(el.id, appName));
+      }
+    });
+
+    return repeatableAfterSelector.map((element) => {
+      // Auto-resolve conditionalRequiredSourceId ke likert/rating di app yang sama
+      const resolvedSourceId = element.conditionalRequiredSourceId
+        ? toContextElementId(element.conditionalRequiredSourceId, appName)
+        : element.type === "text"
+          ? (() => {
+              // Cari likert/rating terdekat sebelum element ini
+              const idx = repeatableAfterSelector.indexOf(element);
+              for (let i = idx - 1; i >= 0; i--) {
+                const prev = repeatableAfterSelector[i];
+                if (prev.type === "likert" || prev.type === "rating") {
+                  return toContextElementId(prev.id, appName);
+                }
+              }
+              return undefined;
+            })()
+          : undefined;
+
+      return {
+        element: {
+          ...element,
+          id: toContextElementId(element.id, appName),
+          title: element.type === "text"
+            ? element.title  // komentar tidak perlu label app, sudah ada appGroupLabel
+            : `${element.title || "Question"} (${appName})`,
+          conditionalRequiredSourceId: resolvedSourceId,
+          // Pastikan threshold terset untuk komentar
+          conditionalRequiredThreshold: element.conditionalRequiredThreshold ?? 7,
+        },
+        sourceQuestion: questionMap.get(element.id) as PublicQuestion,
+        applicationName: appName,
+        baseQuestionId: element.id,
+      };
+    });
+  });
 
   return [...baseQuestions, ...repeatedQuestions];
 }
@@ -322,13 +390,33 @@ function buildResponseValue(element: PreviewElement, values: Record<string, unkn
   }
 
   if (element.type === "likert") {
+    const rawOptions = element.options;
+    const lastItem = rawOptions[rawOptions.length - 1];
+    const lastAsNum = Number(lastItem);
+    const hasScaleAtEnd = rawOptions.length > 0 && Number.isFinite(lastAsNum) && lastAsNum >= 1 && lastAsNum <= 10 && String(Math.round(lastAsNum)) === String(lastItem);
+    const rows = hasScaleAtEnd ? rawOptions.slice(0, -1) : rawOptions;
+
     const matrixValues = Object.fromEntries(
-      element.options.map((_, rowIdx) => {
+      rows.map((_, rowIdx) => {
         const key = `${element.id}-${rowIdx}`;
         return [rowIdx, Number(values[key] || 0)];
       }).filter(([, value]) => Number.isFinite(value) && value > 0),
     );
-    return { matrixValues: Object.keys(matrixValues).length > 0 ? matrixValues : null };
+
+    // Kumpulkan komentar per row — hanya jika enableComment aktif
+    const rowComments: Record<number, string> = {};
+    if (element.likertEnableComment !== false) {
+      rows.forEach((_, rowIdx) => {
+        const commentKey = `${element.id}-comment-${rowIdx}`;
+        const comment = String(values[commentKey] || "").trim();
+        if (comment) rowComments[rowIdx] = comment;
+      });
+    }
+
+    return {
+      matrixValues: Object.keys(matrixValues).length > 0 ? matrixValues : null,
+      commentValue: Object.keys(rowComments).length > 0 ? JSON.stringify(rowComments) : null,
+    };
   }
 
   if (element.type === "matrix") {
@@ -399,7 +487,7 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
           })),
           functions: masterResult.data.functions.map((item) => ({
             FunctionId: item.id,
-            Code: "",
+            Code: 0,
             Name: item.name,
             IsActive: true,
           })),
@@ -446,8 +534,17 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
   const effectiveStatus = form ? resolveEventStatus({ Status: form.status, StartDate: form.startDate || "", EndDate: form.endDate || "" }) : "-";
   const showProgress = form?.configuration?.showProgressBar !== false && pageGroups.length > 1;
   const showPageNumbers = form?.configuration?.showPageNumbers !== false && pageGroups.length > 1;
+  // Welcome page = page pertama yang kosong (hanya HeroCover)
+  const isWelcomePage = currentPage !== null && currentPage.questions.length === 0;
+  
+  // Hero title/subtitle — prioritas: config > form title/desc
   const heroTitle = form?.configuration?.heroTitle || form?.title || "Survey";
   const heroSubtitle = form?.configuration?.heroSubtitle || form?.description || "";
+  
+  // Hero image — prioritas: config.heroImageUrl > config.logoUrl > question HeroCover imageUrl
+  const heroCoverQuestion = form?.questions.find((q) => q.type === "HeroCover");
+  const heroImageUrl = form?.configuration?.heroImageUrl || form?.configuration?.logoUrl || heroCoverQuestion?.imageUrl || "";
+  
   const primaryColor = form?.configuration?.primaryColor || "#125ba1";
   const secondaryColor = form?.configuration?.secondaryColor || "#2c8dd8";
   const buttonStyle = form?.configuration?.buttonStyle || "rounded";
@@ -481,6 +578,28 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
         (responseValue.matrixValues && Object.keys(responseValue.matrixValues).length > 0);
       if (!hasValue) {
         nextErrors[element.id] = "Field ini wajib diisi.";
+      }
+
+      // Validasi komentar per row untuk likert — hanya jika enableComment aktif
+      if (element.type === "likert" && element.likertEnableComment !== false) {
+        const rawOptions = element.options;
+        const lastItem = rawOptions[rawOptions.length - 1];
+        const lastAsNum = Number(lastItem);
+        const hasScaleAtEnd = rawOptions.length > 0 && Number.isFinite(lastAsNum) && lastAsNum >= 1 && lastAsNum <= 10 && String(Math.round(lastAsNum)) === String(lastItem);
+        const rows = hasScaleAtEnd ? rawOptions.slice(0, -1) : rawOptions;
+        const commentThreshold = Math.max(1, Math.round(Number(element.conditionalRequiredThreshold || 7)));
+
+        rows.forEach((_, rowIdx) => {
+          const rowKey = `${element.id}-${rowIdx}`;
+          const commentKey = `${element.id}-comment-${rowIdx}`;
+          const selectedVal = Number(values[rowKey] || 0);
+          if (selectedVal > 0 && selectedVal < commentThreshold) {
+            const comment = String(values[commentKey] || "").trim();
+            if (!comment) {
+              nextErrors[commentKey] = `Komentar wajib diisi jika nilai < ${commentThreshold}.`;
+            }
+          }
+        });
       }
     });
     setValidationErrors(nextErrors);
@@ -611,39 +730,83 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
   };
 
   if (loading) {
-    return <section className={styles.page}><div className={styles.shell}><div className={styles.alertInfo}>Memuat survey...</div></div></section>;
+    return (
+      <section className={styles.page}>
+        <div className={styles.shell}>
+          <div className={styles.card}>
+            <div className={styles.loadingWrap}>Memuat survey...</div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (error && !form) {
-    return <section className={styles.page}><div className={styles.shell}><div className={styles.alertError}>{error}</div></div></section>;
+    return (
+      <section className={styles.page}>
+        <div className={styles.shell}>
+          <div className={styles.card}>
+            <div className={styles.body}>
+              <div className={styles.alertError}>{error}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (!form || !currentPage) {
-    return <section className={styles.page}><div className={styles.shell}><div className={styles.empty}>Survey tidak tersedia.</div></div></section>;
+    return (
+      <section className={styles.page}>
+        <div className={styles.shell}>
+          <div className={styles.card}>
+            <div className={styles.body}>
+              <div className={styles.empty}>Survey tidak tersedia.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
+
+  const pageStyle = {
+    "--survey-primary": primaryColor,
+    "--survey-secondary": secondaryColor,
+    backgroundColor: form.configuration?.backgroundColor || undefined,
+    backgroundImage: form.configuration?.backgroundImageUrl ? `url(${form.configuration.backgroundImageUrl})` : undefined,
+    backgroundSize: form.configuration?.backgroundImageUrl ? "cover" : undefined,
+  } as CSSProperties;
+
+  const btnClass = (base: string) =>
+    `${base} ${buttonStyle === "pill" ? styles.btnPill : buttonStyle === "square" ? styles.btnSquare : ""}`.trim();
+
+  const currentPageSubtitle = currentPage.title !== `Page ${currentPageIndex + 1}` ? currentPage.title : "";
 
   if (submitted) {
     return (
-      <section
-        className={styles.page}
-        style={{
-          "--survey-primary": primaryColor,
-          "--survey-secondary": secondaryColor,
-          backgroundColor: form.configuration?.backgroundColor || undefined,
-          backgroundImage: form.configuration?.backgroundImageUrl ? `url(${form.configuration.backgroundImageUrl})` : undefined,
-          backgroundSize: form.configuration?.backgroundImageUrl ? "cover" : undefined,
-        } as CSSProperties}
-      >
+      <section className={styles.page} style={pageStyle}>
         <div className={styles.shell}>
           <div className={styles.card}>
-            <div className={styles.hero} style={{ fontFamily: form.configuration?.fontFamily || undefined }}>
-              {form.configuration?.logoUrl ? <img src={form.configuration.logoUrl} alt="Survey logo" className={styles.logo} /> : null}
-              <h1 className={styles.title}>{heroTitle}</h1>
-              {heroSubtitle ? <p className={styles.subtitle}>{heroSubtitle}</p> : null}
+            <div className={styles.heroWrap}>
+              {heroImageUrl ? (
+                <img src={heroImageUrl} alt="Survey header" className={styles.heroImage} />
+              ) : (
+                <div className={styles.heroImagePlaceholder} />
+              )}
+              <div className={styles.brandBadge}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/assets/img/logo.png" alt="PT Astra Otoparts Tbk" className={styles.brandBadgeLogo} />
+              </div>
             </div>
-            <div className={`${styles.body} ${styles.successBody}`}>
+            <div className={styles.titlebar} style={{ fontFamily: form.configuration?.fontFamily || undefined }}>
+              {heroTitle}
+            </div>
+            <div className={styles.subbar}>
+              <span className={`${styles.subbarStatus} ${styles.statusActive}`}>Terima Kasih</span>
+            </div>
+            <div className={styles.successBody}>
               <div className={styles.successPanel}>
-                <div className={styles.successBadge}>Response Submitted</div>
+                <div className={styles.successIcon}>✅</div>
                 <h2 className={styles.successTitle}>Terima kasih atas partisipasi Anda.</h2>
                 <p className={styles.successText}>
                   Response untuk survey ini sudah berhasil dikirim. Anda tidak perlu mengisi ulang halaman ini.
@@ -658,43 +821,62 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
   }
 
   return (
-    <section
-      className={styles.page}
-      style={{
-        "--survey-primary": primaryColor,
-        "--survey-secondary": secondaryColor,
-        backgroundColor: form.configuration?.backgroundColor || undefined,
-        backgroundImage: form.configuration?.backgroundImageUrl ? `url(${form.configuration.backgroundImageUrl})` : undefined,
-        backgroundSize: form.configuration?.backgroundImageUrl ? "cover" : undefined,
-      } as CSSProperties}
-    >
+    <section className={styles.page} style={pageStyle}>
       <div className={styles.shell}>
-        <div className={styles.card}>
-          <div className={styles.hero} style={{ fontFamily: form.configuration?.fontFamily || undefined }}>
-            {form.configuration?.logoUrl ? <img src={form.configuration.logoUrl} alt="Survey logo" className={styles.logo} /> : null}
-            <h1 className={styles.title}>{heroTitle}</h1>
-            {heroSubtitle ? <p className={styles.subtitle}>{heroSubtitle}</p> : null}
-            <div className={styles.meta}>
-              <span className={`${styles.metaItem} ${effectiveStatus === "Active" ? styles.statusActive : styles.statusClosed}`}>{effectiveStatus}</span>
-              {showPageNumbers ? <span className={styles.metaItem}>Page {currentPageIndex + 1} of {pageGroups.length}</span> : null}
+        <div className={styles.card} style={{ fontFamily: form.configuration?.fontFamily || undefined }}>
+
+          {/* Hero image — full width di atas titlebar, dengan logo overlay */}
+          <div className={styles.heroWrap}>
+            {heroImageUrl ? (
+              <img src={heroImageUrl} alt="Survey header" className={styles.heroImage} />
+            ) : (
+              <div className={styles.heroImagePlaceholder} />
+            )}
+            {/* Logo Astra Otoparts — pojok kanan atas hero image */}
+            <div className={styles.brandBadge}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/assets/img/logo.png" alt="PT Astra Otoparts Tbk" className={styles.brandBadgeLogo} />
             </div>
           </div>
 
+          {/* Title bar — warna primary */}
+          <div className={styles.titlebar}>{heroTitle}</div>
+
+          {/* Sub bar — soft primary, berisi subtitle + status + page indicator */}
+          <div className={styles.subbar}>
+            {renderedQuestions.length > 0 && currentPageSubtitle ? <span>{currentPageSubtitle}</span> : null}
+            {renderedQuestions.length > 0 && !currentPageSubtitle && heroSubtitle ? <span>{heroSubtitle}</span> : null}
+            <span className={`${styles.subbarStatus} ${effectiveStatus === "Active" ? styles.statusActive : styles.statusClosed}`}>
+              {effectiveStatus}
+            </span>
+            {showPageNumbers ? (
+              <span className={styles.subbarPage}>
+                Page {currentPageIndex + 1} / {pageGroups.length}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Body */}
           <div className={styles.body}>
             {error ? <div className={styles.alertError}>{error}</div> : null}
             {message ? <div className={styles.alertSuccess}>{message}</div> : null}
 
-            {showProgress ? (
+            {showProgress && !isWelcomePage ? (
               <div className={styles.progressWrap}>
-                <div className={styles.progressTrack}><div className={styles.progressBar} style={{ width: `${progressPercent}%` }} /></div>
+                <div className={styles.progressTrack}>
+                  <div className={styles.progressBar} style={{ width: `${progressPercent}%` }} />
+                </div>
                 <div className={styles.progressMeta}>{Math.round(progressPercent)}% selesai</div>
               </div>
             ) : null}
 
-            <h2 className={styles.pageTitle}>{currentPage.title}</h2>
-
             <div className={styles.questionList}>
-              {renderedQuestions.map(({ element, sourceQuestion, applicationName }) => {
+              {renderedQuestions.length === 0 ? (
+                // Welcome page — hanya hero image + titlebar + subbar + Next
+                // Tidak ada konten di body, sesuai mockup page1.html
+                <div className={styles.welcomeBody} />
+              ) : (
+                renderedQuestions.map(({ element, sourceQuestion, applicationName }) => {
                 const effectiveRequired = element.required || isConditionallyRequired(element, values);
                 const effectiveElement = { ...element, required: effectiveRequired };
                 const ratingThreshold = Number((sourceQuestion.options || {}).commentRequiredBelowRating || 0);
@@ -707,7 +889,7 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
                     {effectiveElement.type !== "hero" && effectiveElement.title.trim() ? (
                       <label className={styles.questionLabel}>
                         {effectiveElement.title}
-                        {effectiveElement.required ? " *" : ""}
+                        {effectiveElement.required ? <span style={{ color: "#cc0033", marginLeft: 2 }}>*</span> : null}
                       </label>
                     ) : null}
                     {effectiveElement.type !== "hero" && effectiveElement.subtitle ? (
@@ -731,7 +913,9 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
                     />
                     {showRatingComment ? (
                       <div className={styles.inlineField}>
-                        <label className={styles.inlineLabel}>Komentar wajib untuk rating di bawah {ratingThreshold}</label>
+                        <label className={styles.inlineLabel}>
+                          Komentar wajib untuk rating di bawah {ratingThreshold}
+                        </label>
                         <textarea
                           className={styles.textarea}
                           value={commentValues[element.id] || ""}
@@ -739,41 +923,63 @@ export default function SurveyClient({ surveyId }: { surveyId: string }) {
                         />
                       </div>
                     ) : null}
-                    {validationErrors[element.id] ? <div className={styles.errorText}>{validationErrors[element.id]}</div> : null}
+                    {validationErrors[element.id] ? (
+                      <div className={styles.errorText}>{validationErrors[element.id]}</div>
+                    ) : null}
+                    {/* Error komentar per row likert */}
+                    {effectiveElement.type === "likert" ? (() => {
+                      const rawOpts = effectiveElement.options;
+                      const lastOpt = rawOpts[rawOpts.length - 1];
+                      const lastNum = Number(lastOpt);
+                      const hasScale = rawOpts.length > 0 && Number.isFinite(lastNum) && lastNum >= 1 && lastNum <= 10 && String(Math.round(lastNum)) === String(lastOpt);
+                      const rowCount = (hasScale ? rawOpts.slice(0, -1) : rawOpts).length;
+                      return Array.from({ length: rowCount }, (_, rowIdx) => {
+                        const commentKey = `${effectiveElement.id}-comment-${rowIdx}`;
+                        return validationErrors[commentKey] ? (
+                          <div key={commentKey} className={styles.errorText}>{validationErrors[commentKey]}</div>
+                        ) : null;
+                      });
+                    })() : null}
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
 
-            <div className={styles.nav}>
-              <button
-                type="button"
-                className={`${styles.btnGhost} ${buttonStyle === "pill" ? styles.btnPill : buttonStyle === "square" ? styles.btnSquare : ""}`}
-                disabled={currentPageIndex === 0 || saving}
-                onClick={() => {
-                  setValidationErrors({});
-                  setCurrentPageIndex((prev) => Math.max(0, prev - 1));
-                }}
-              >
-                Previous
-              </button>
+            {/* Navigation */}
+            <div className={`${styles.nav} ${renderedQuestions.length === 0 ? styles.navCenter : ""}`}>
+              {renderedQuestions.length > 0 ? (
+                <button
+                  type="button"
+                  className={btnClass(styles.btnGhost)}
+                  disabled={currentPageIndex === 0 || saving}
+                  onClick={() => {
+                    setValidationErrors({});
+                    setCurrentPageIndex((prev) => Math.max(0, prev - 1));
+                    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  Prev
+                </button>
+              ) : null}
               {currentPageIndex === pageGroups.length - 1 ? (
                 <button
                   type="button"
-                  className={`${styles.btn} ${buttonStyle === "pill" ? styles.btnPill : buttonStyle === "square" ? styles.btnSquare : ""}`}
+                  className={btnClass(styles.btn)}
                   onClick={() => void handleSubmit()}
                   disabled={saving}
                 >
-                  {saving ? "Submitting..." : "Submit Response"}
+                  {saving ? "Submitting..." : "Submit"}
                 </button>
               ) : (
                 <button
                   type="button"
-                  className={`${styles.btn} ${buttonStyle === "pill" ? styles.btnPill : buttonStyle === "square" ? styles.btnSquare : ""}`}
+                  className={btnClass(styles.btn)}
                   disabled={saving}
                   onClick={() => {
                     if (!validateCurrentPage()) return;
                     setCurrentPageIndex((prev) => Math.min(pageGroups.length - 1, prev + 1));
+                    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                 >
                   Next

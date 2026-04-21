@@ -30,6 +30,10 @@ export interface BuilderElement {
   displayCondition?: "always" | "after_mapped_selection";
   conditionalRequiredSourceId?: string;
   conditionalRequiredThreshold?: number;
+  /** Threshold untuk komentar wajib per row di likert. Komentar wajib jika nilai < threshold. Default 7. */
+  likertCommentThreshold?: number;
+  /** Aktifkan textbox komentar per statement di likert. Default true. */
+  likertEnableComment?: boolean;
 }
 
 export interface BuilderPage {

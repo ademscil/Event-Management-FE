@@ -24,9 +24,8 @@ type FilterStatus = "all" | "active" | "inactive";
 function matchesSearch(item: FunctionMaster, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterFunctionPage() {
@@ -44,7 +43,6 @@ export default function MasterFunctionPage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<FunctionMaster | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState("Active");
   const [submitting, setSubmitting] = useState(false);
@@ -101,7 +99,6 @@ export default function MasterFunctionPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setCode("");
     setName("");
     setActive("Active");
     setShowModal(true);
@@ -109,7 +106,6 @@ export default function MasterFunctionPage() {
 
   const openEdit = (row: FunctionMaster) => {
     setEditing(row);
-    setCode(row.Code || "");
     setName(row.Name || "");
     setActive(row.IsActive ? "Active" : "Inactive");
     setShowModal(true);
@@ -122,14 +118,14 @@ export default function MasterFunctionPage() {
   };
 
   const onSubmit = async () => {
-    if (!code.trim() || !name.trim()) {
-      showFeedback("Function Code dan Function Name wajib diisi.", "Validasi");
+    if (!name.trim()) {
+      showFeedback("Function Name wajib diisi.", "Validasi");
       return;
     }
 
     setSubmitting(true);
     if (!editing) {
-      const result = await createFunctionMaster({ code: code.trim(), name: name.trim() });
+      const result = await createFunctionMaster({ name: name.trim() });
       setSubmitting(false);
       if (!result.success) {
         showFeedback(result.message, "Gagal Menyimpan");
@@ -141,7 +137,6 @@ export default function MasterFunctionPage() {
     }
 
     const result = await updateFunctionMaster(editing.FunctionId, {
-      code: code.trim(),
       name: name.trim(),
       isActive: active === "Active",
     });
@@ -258,28 +253,25 @@ export default function MasterFunctionPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -306,7 +298,7 @@ export default function MasterFunctionPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>Function Code</th>
+                    <th>No.</th>
                     <th>Function Name</th>
                     <th>Status</th>
                     <th>Aksi</th>
@@ -318,9 +310,9 @@ export default function MasterFunctionPage() {
                       <td colSpan={4}>Tidak ada data function</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.FunctionId}>
-                        <td>{item.Code}</td>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.Name}</td>
                         <td>
                           <span className={`${styles.badge} ${item.IsActive ? styles.badgeActive : styles.badgeClosed}`}>
@@ -365,7 +357,7 @@ export default function MasterFunctionPage() {
           <span className={styles.meta}>Unggah data master function dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-function-upload-label">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -389,7 +381,7 @@ export default function MasterFunctionPage() {
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom: Function Code, Function Name, Status. Download template untuk format yang benar.
+          Format file: Excel (.xlsx/.xls). Kolom: Function Name, Status. Download template untuk format yang benar.
         </div>
       </section>
 
@@ -402,12 +394,8 @@ export default function MasterFunctionPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Function Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. INF" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Function Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Infrastructure" />
+                <label className={styles.label} htmlFor="master-function-name-input">Function Name</label>
+                <input id="master-function-name-input" name="functionName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Infrastructure" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>

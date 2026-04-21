@@ -392,12 +392,31 @@ export function toPages(questions?: SurveyQuestion[]): BuilderPage[] {
       displayCondition: parseDisplayCondition(q.Options),
       conditionalRequiredSourceId: parseConditionalRequiredSourceId(q.Options),
       conditionalRequiredThreshold: parseConditionalRequiredThreshold(q.Options),
+      likertCommentThreshold: (() => {
+        if (resolvedType !== "likert" || !q.Options || typeof q.Options !== "object") return undefined;
+        const val = Number((q.Options as Record<string, unknown>).commentThreshold);
+        return Number.isFinite(val) && val >= 1 ? Math.min(10, Math.round(val)) : 7;
+      })(),
+      likertEnableComment: (() => {
+        if (resolvedType !== "likert" || !q.Options || typeof q.Options !== "object") return undefined;
+        const val = (q.Options as Record<string, unknown>).enableComment;
+        // default true jika tidak ada field
+        return val === false ? false : true;
+      })(),
     });
   });
 
   return Array.from(map.entries())
     .sort(([a], [b]) => a - b)
-    .map(([id, elements]) => ({ id, title: id === 1 ? "Welcome" : `Page ${id}`, elements }));
+    .map(([id, elements]) => {
+      // Page yang hanya berisi HeroCover → title dikosongkan
+      const isHeroCoverOnly = elements.length > 0 && elements.every((el) => el.type === "hero");
+      return {
+        id,
+        title: isHeroCoverOnly ? "" : (id === 1 ? "Welcome" : `Page ${id}`),
+        elements,
+      };
+    });
 }
 
 export function buildTempElementId(counter: number): string {

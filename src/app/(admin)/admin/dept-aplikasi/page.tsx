@@ -383,21 +383,19 @@ export default function DeptAplikasiPage() {
           <h2 className={styles.panelTitle}>Filter Data</h2>
           <div className={styles.meta}>Total: {filteredRows.length} records</div>
         </div>
-        <div className={baseStyles.periodRow}>
-          <div className={baseStyles.periodLabel}>STATUS</div>
-          <div className={baseStyles.periodColon}>:</div>
-          <Dropdown
-            className={`${baseStyles.select} ${baseStyles.statusControl}`}
-            options={[{ value: "all", label: "All" }]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
+        <div className={baseStyles.filterBarGrid}>
+          <div className={baseStyles.filterField}>
+            <label className={baseStyles.filterLabel}>Status</label>
+            <Dropdown
+              className={baseStyles.filterSelect}
+              fullWidth
+              options={[{ value: "all", label: "All" }]}
+              value={statusFilter}
+              onChange={setStatusFilter}
+            />
+          </div>
         </div>
         <SearchBar
-          rowClassName={baseStyles.masterSearchRow}
-          selectClassName={baseStyles.masterSearchSelect}
-          inputClassName={`${baseStyles.input} ${baseStyles.masterSearchInput}`}
-          buttonClassName={baseStyles.masterSearchButton}
           options={[
             { value: "all", label: "Search By" },
             { value: "businessUnit", label: "Business Unit" },
@@ -537,15 +535,16 @@ export default function DeptAplikasiPage() {
             <div className={styles.modalHeader}>
               <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
               <button
-                className={styles.btn}
+                className={styles.modalClose}
                 type="button"
+                aria-label="Close"
                 onClick={() => {
                   if (submitting) return;
                   setShowModal(false);
                   resetForm();
                 }}
               >
-                Close
+                ✕
               </button>
             </div>
             <div className={styles.modalBody}>

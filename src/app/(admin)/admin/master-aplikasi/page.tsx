@@ -24,9 +24,8 @@ type FilterStatus = "all" | "active" | "inactive";
 function matchesSearch(item: ApplicationMaster, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterAplikasiPage() {
@@ -44,7 +43,6 @@ export default function MasterAplikasiPage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ApplicationMaster | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState("Active");
@@ -102,7 +100,6 @@ export default function MasterAplikasiPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setCode("");
     setName("");
     setDescription("");
     setActive("Active");
@@ -111,7 +108,6 @@ export default function MasterAplikasiPage() {
 
   const openEdit = (row: ApplicationMaster) => {
     setEditing(row);
-    setCode(row.Code || "");
     setName(row.Name || "");
     setDescription(row.Description || "");
     setActive(row.IsActive ? "Active" : "Inactive");
@@ -125,15 +121,14 @@ export default function MasterAplikasiPage() {
   };
 
   const onSubmit = async () => {
-    if (!code.trim() || !name.trim()) {
-      showFeedback("App Code dan App Name wajib diisi.", "Validasi");
+    if (!name.trim()) {
+      showFeedback("App Name wajib diisi.", "Validasi");
       return;
     }
 
     setSubmitting(true);
     if (!editing) {
       const result = await createApplicationMaster({
-        code: code.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
       });
@@ -148,7 +143,6 @@ export default function MasterAplikasiPage() {
     }
 
     const result = await updateApplicationMaster(editing.ApplicationId, {
-      code: code.trim(),
       name: name.trim(),
       description: description.trim(),
       isActive: active === "Active",
@@ -266,28 +260,25 @@ export default function MasterAplikasiPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -314,7 +305,7 @@ export default function MasterAplikasiPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>App Code</th>
+                    <th>No.</th>
                     <th>App Name</th>
                     <th>Description</th>
                     <th>Status</th>
@@ -327,9 +318,9 @@ export default function MasterAplikasiPage() {
                       <td colSpan={5}>Tidak ada data aplikasi</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.ApplicationId}>
-                        <td>{item.Code}</td>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.Name}</td>
                         <td>{item.Description || "-"}</td>
                         <td>
@@ -375,7 +366,7 @@ export default function MasterAplikasiPage() {
           <span className={styles.meta}>Unggah data master aplikasi dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-aplikasi-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -399,7 +390,7 @@ export default function MasterAplikasiPage() {
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom: App Code, App Name, Description, Status. Download template untuk format yang benar.
+          Format file: Excel (.xlsx/.xls). Kolom: App Name, Description, Status. Download template untuk format yang benar.
         </div>
       </section>
 
@@ -412,12 +403,8 @@ export default function MasterAplikasiPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>App Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. B2B" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>App Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. B2B Ordering" />
+                <label className={styles.label} htmlFor="master-app-name-input">App Name</label>
+                <input id="master-app-name-input" name="appName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. B2B Ordering" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Description</label>

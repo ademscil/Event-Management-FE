@@ -97,6 +97,67 @@ src/
 
 ---
 
+## Admin Design System (`page-mockup.module.css`)
+
+Semua halaman admin menggunakan satu shared CSS Module di:
+
+```
+src/app/(admin)/admin/page-mockup.module.css
+```
+
+File ini adalah design system utama admin panel. Import dan gunakan class-nya via CSS Modules:
+
+```tsx
+import styles from '@/app/(admin)/admin/page-mockup.module.css';
+```
+
+### Kelompok Class Utama
+
+| Kelompok | Class | Keterangan |
+|---|---|---|
+| **Page Header** | `pageHead`, `title`, `subtitle`, `toolbar` | Header halaman dengan judul dan toolbar aksi |
+| **Panel / Card** | `panel`, `panelHeader`, `panelTitle`, `meta` | Container konten utama |
+| **Filter Toolbar** | `filterToolbar`, `filterGroup`, `filterGroupSm/Md/Lg/Auto`, `filterLabel`, `filterControl` | Baris filter dengan label dan kontrol |
+| **Form** | `formGroup`, `label`, `input`, `select`, `textarea` | Elemen form standar |
+| **Buttons** | `btn`, `btnPrimary`, `btnSecondary`, `btnDanger`, `btnRow` | Tombol aksi |
+| **Badges** | `badge`, `badgeActive`, `badgeClosed`, `badgeWarning`, `badgeDraft`, `badgePrimary` | Status label |
+| **Table** | `tableWrap`, `table` | Tabel standar dengan horizontal scroll |
+| **Master Table** | `masterTableWrap`, `masterTable` | Tabel lebar untuk halaman master data |
+| **Pagination** | `pagination` | Kontrol halaman tabel |
+| **Modal** | `modalOverlay`, `modalCard`, `wideModalCard`, `modalHeader`, `modalTitle`, `modalClose`, `modalBody`, `modalFooter`, `modalGridTwo` | Dialog/modal |
+| **Upload** | `uploadRow`, `filePickerWrap`, `fileTrigger`, `fileText`, `uploadNote` | Komponen upload file |
+| **Chip / Tag** | `chipInputWrap`, `chip`, `chipRemove`, `chipInput`, `suggestionMenu`, `suggestionItem` | Input multi-tag dengan autocomplete |
+| **Operations Panel** | `operationalPanel`, `opsPanel`, `opsLayout`, `opsBlock`, `channelTabs`, `channelTab`, `channelTabActive` | Panel operasional survey (link/QR/blast) |
+| **Toggle** | `toggleSwitch`, `toggleSwitchOn`, `toggleThumb` | Toggle switch on/off |
+| **Misc** | `filterGrid`, `controlRow`, `subPanel`, `scheduleGrid`, `masterDownloadButton` | Helper layout |
+
+### Pola Penggunaan Filter Toolbar
+
+```tsx
+<div className={styles.filterToolbar}>
+  <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
+    <label className={styles.filterLabel}>Status</label>
+    <select className={styles.filterControl}>...</select>
+  </div>
+  <div className={`${styles.filterGroup} ${styles.filterGroupAuto}`}>
+    <label className={styles.filterLabel}>Cari</label>
+    <input className={styles.filterControl} type="text" />
+  </div>
+</div>
+```
+
+### Responsive Breakpoints
+
+- `≤ 768px`: Panel padding dikurangi, filter group menjadi flex wrap, modal grid menjadi 1 kolom.
+- `≤ 480px`: Filter toolbar menjadi kolom penuh, semua filter group stretch 100%.
+
+### Legacy Aliases
+
+Class lama berikut tetap tersedia agar halaman yang sudah ada tidak rusak:
+`filterBar`, `filterBarGrid`, `filterField`, `filterInput`, `filterSelect`, `filterActions`.
+
+---
+
 ## Auth Flow
 
 ```

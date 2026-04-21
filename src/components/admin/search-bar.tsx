@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import styles from "./search-bar.module.css";
 
 type SearchOption = {
   label: string;
@@ -8,10 +9,14 @@ type SearchOption = {
 };
 
 type SearchBarProps = {
-  rowClassName: string;
-  selectClassName: string;
-  inputClassName: string;
-  buttonClassName: string;
+  /** @deprecated pass className via the new API — kept for backward compat, ignored */
+  rowClassName?: string;
+  /** @deprecated ignored */
+  selectClassName?: string;
+  /** @deprecated ignored */
+  inputClassName?: string;
+  /** @deprecated ignored */
+  buttonClassName?: string;
   options: SearchOption[];
   selectedValue: string;
   keyword: string;
@@ -25,40 +30,31 @@ type SearchBarProps = {
 };
 
 export function SearchBar({
-  rowClassName,
-  selectClassName,
-  inputClassName,
-  buttonClassName,
   options,
   selectedValue,
   keyword,
   onSelectedValueChange,
   onKeywordChange,
-  placeholder = "search here ...",
-  buttonLabel = "Search",
+  placeholder = "Cari...",
+  buttonLabel = "Cari",
   buttonType = "button",
   onButtonClick,
   trailingContent,
 }: SearchBarProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find((opt) => opt.value === selectedValue) || options[0];
+  const selectedOption = options.find((opt) => opt.value === selectedValue) ?? options[0];
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
   }, [isOpen]);
 
   const handleSelect = (value: string) => {
@@ -67,78 +63,71 @@ export function SearchBar({
   };
 
   return (
-    <div className={rowClassName}>
-      <div ref={dropdownRef} style={{ position: "relative", flexShrink: 0 }}>
+    <div className={`${styles.root} search-bar-root`} ref={wrapperRef}>
+      {/* Category selector */}
+      <div className={styles.selectWrap}>
         <button
           type="button"
-          className={selectClassName}
-          onClick={() => setIsOpen(!isOpen)}
-          style={{ cursor: "pointer", userSelect: "none" }}
+          className={styles.selectTrigger}
+          onClick={() => setIsOpen((prev) => !prev)}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
         >
-          {selectedOption.label}
-          <span aria-hidden="true" style={{ marginLeft: "6px", fontSize: "10px" }}>
-            {isOpen ? "^" : "v"}
-          </span>
-        </button>
-        {isOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
-              zIndex: 1000,
-              background: "#ffffff",
-              border: "1px solid #d1d5db",
-              borderRadius: "8px",
-              marginTop: "4px",
-              minWidth: "100%",
-              boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-            }}
+          {selectedOption?.label ?? "Search By"}
+          <svg
+            className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
           >
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+
+        {isOpen ? (
+          <div className={styles.selectMenu} role="listbox">
             {options.map((option) => (
               <button
                 key={option.value}
                 type="button"
+                role="option"
+                aria-selected={option.value === selectedValue}
+                className={`${styles.selectOption} ${option.value === selectedValue ? styles.selectOptionActive : ""}`}
                 onClick={() => handleSelect(option.value)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "10px 14px",
-                  border: 0,
-                  background: selectedValue === option.value ? "#f3f4f6" : "#ffffff",
-                  color: "#111827",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: selectedValue === option.value ? 600 : 400,
-                }}
-                onMouseEnter={(event) => {
-                  if (selectedValue !== option.value) {
-                    event.currentTarget.style.background = "#f9fafb";
-                  }
-                }}
-                onMouseLeave={(event) => {
-                  if (selectedValue !== option.value) {
-                    event.currentTarget.style.background = "#ffffff";
-                  }
-                }}
               >
                 {option.label}
               </button>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
+
+      {/* Text input */}
       <input
-        className={inputClassName}
+        className={styles.input}
         type="search"
         placeholder={placeholder}
         value={keyword}
-        onChange={(event) => onKeywordChange(event.target.value)}
+        onChange={(e) => onKeywordChange(e.target.value)}
+        aria-label={placeholder}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && onButtonClick) onButtonClick();
+        }}
       />
-      <button className={buttonClassName} type={buttonType} onClick={onButtonClick}>
+
+      {/* Search button */}
+      <button
+        className={styles.button}
+        type={buttonType}
+        onClick={onButtonClick}
+      >
         {buttonLabel}
       </button>
-      {trailingContent}
+
+      {/* Trailing slot (e.g. Download button) */}
+      {trailingContent ? (
+        <div className={styles.trailing}>{trailingContent}</div>
+      ) : null}
     </div>
   );
 }

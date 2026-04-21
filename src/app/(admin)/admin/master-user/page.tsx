@@ -434,76 +434,21 @@ export default function MasterUserPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>ROLE</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All Roles" },
-                { value: "SuperAdmin", label: "Super Admin" },
-                { value: "AdminEvent", label: "Admin Event" },
-                { value: "ITLead", label: "IT Lead" },
-                { value: "DepartmentHead", label: "Dept Head" },
-              ]}
-              value={roleFilter}
-              onChange={setRoleFilter}
-            />
+          <div className={styles.filterToolbar}>
+            <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
+              <label className={styles.filterLabel}>Role</label>
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Role" }, { value: "SuperAdmin", label: "Super Admin" }, { value: "AdminEvent", label: "Admin Event" }, { value: "ITLead", label: "IT Lead" }, { value: "DepartmentHead", label: "Dept Head" }]} value={roleFilter} onChange={setRoleFilter} />
+            </div>
+            <div className={`${styles.filterGroup} ${styles.filterGroupLg}`}>
+              <label className={styles.filterLabel}>Department</label>
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Department" }, ...filterDepartments.map((d) => ({ value: d.DepartmentId, label: d.Name }))]} value={departmentFilter} onChange={setDepartmentFilter} />
+            </div>
+            <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} value={statusFilter} onChange={setStatusFilter} />
+            </div>
+            <SearchBar options={[{ value: "all", label: "Search By" }, { value: "npk", label: "NPK" }, { value: "username", label: "Username" }, { value: "name", label: "Name" }, { value: "email", label: "Email" }, { value: "role", label: "Role" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} buttonType="submit" placeholder="Cari user..." trailingContent={(<button className={styles.masterDownloadButton} type="button" onClick={onDownload}>Download</button>)} />
           </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>DEPARTMENT</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All Departments" },
-                ...filterDepartments.map((department) => ({
-                  value: department.DepartmentId,
-                  label: department.Name,
-                })),
-              ]}
-              value={departmentFilter}
-              onChange={setDepartmentFilter}
-            />
-          </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={setStatusFilter}
-            />
-          </div>
-          <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
-            options={[
-              { value: "all", label: "Search By" },
-              { value: "npk", label: "NPK" },
-              { value: "username", label: "Username" },
-              { value: "name", label: "Name" },
-              { value: "email", label: "Email" },
-              { value: "role", label: "Role" },
-            ]}
-            selectedValue={searchBy}
-            keyword={keyword}
-            onSelectedValueChange={setSearchBy}
-            onKeywordChange={setKeyword}
-            buttonType="submit"
-            trailingContent={(
-              <button className={styles.masterDownloadButton} type="button" onClick={onDownload}>
-                Download
-              </button>
-            )}
-          />
         </form>
       </section>
 
@@ -562,14 +507,14 @@ export default function MasterUserPage() {
                             type="button"
                             onClick={() => openEditModal(user)}
                           >
-                            Edit
+                            ✏️ Edit
                           </button>
                           <button
                             className={`${styles.btn} ${user.IsActive ? styles.btnDanger : styles.btnPrimary}`}
                             type="button"
                             onClick={() => onToggleUserStatus(user)}
                           >
-                            {user.IsActive ? "Deactivate" : "Activate"}
+                            {user.IsActive ? "⊘ Deactivate" : "✓ Activate"}
                           </button>
                         </div>
                       </td>

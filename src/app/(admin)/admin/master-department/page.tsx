@@ -34,9 +34,8 @@ type DepartmentRow = DepartmentMaster & {
 function matchesSearch(item: DepartmentRow, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterDepartmentPage() {
@@ -60,7 +59,6 @@ export default function MasterDepartmentPage() {
   const [editing, setEditing] = useState<DepartmentRow | null>(null);
   const [businessUnitId, setBusinessUnitId] = useState("");
   const [divisionId, setDivisionId] = useState("");
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState("Active");
   const [submitting, setSubmitting] = useState(false);
@@ -175,7 +173,6 @@ export default function MasterDepartmentPage() {
     setEditing(null);
     setBusinessUnitId("");
     setDivisionId("");
-    setCode("");
     setName("");
     setActive("Active");
     setShowModal(true);
@@ -185,7 +182,6 @@ export default function MasterDepartmentPage() {
     setEditing(row);
     setBusinessUnitId(row.businessUnitId || "");
     setDivisionId(row.DivisionId || "");
-    setCode(row.Code || "");
     setName(row.Name || "");
     setActive(row.IsActive ? "Active" : "Inactive");
     setShowModal(true);
@@ -198,8 +194,8 @@ export default function MasterDepartmentPage() {
   };
 
   const onSubmit = async () => {
-    if (!businessUnitId || !divisionId || !code.trim() || !name.trim()) {
-      showFeedback("BU, Divisi, Dept Code, dan Department Name wajib diisi.", "Validasi");
+    if (!businessUnitId || !divisionId || !name.trim()) {
+      showFeedback("BU, Divisi, dan Department Name wajib diisi.", "Validasi");
       return;
     }
 
@@ -207,7 +203,6 @@ export default function MasterDepartmentPage() {
     if (!editing) {
       const result = await createDepartmentMaster({
         divisionId,
-        code: code.trim(),
         name: name.trim(),
       });
       setSubmitting(false);
@@ -222,7 +217,6 @@ export default function MasterDepartmentPage() {
 
     const result = await updateDepartmentMaster(editing.DepartmentId, {
       divisionId,
-      code: code.trim(),
       name: name.trim(),
       isActive: active === "Active",
     });
@@ -339,48 +333,45 @@ export default function MasterDepartmentPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>BU</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
-              value={buFilter}
-              onChange={setBuFilter}
-            />
-          </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>DIVISI</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[{ value: "all", label: "All Divisi" }, ...divisionFilterOptions.map((item) => ({ value: item.DivisionId, label: item.Name }))]}
-              value={divisionFilter}
-              onChange={setDivisionFilter}
-            />
-          </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>BU</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
+                value={buFilter}
+                onChange={setBuFilter}
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Divisi</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[{ value: "all", label: "All Divisi" }, ...divisionFilterOptions.map((item) => ({ value: item.DivisionId, label: item.Name }))]}
+                value={divisionFilter}
+                onChange={setDivisionFilter}
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -407,7 +398,7 @@ export default function MasterDepartmentPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>Dept Code</th>
+                    <th>No.</th>
                     <th>Department Name</th>
                     <th>Divisi</th>
                     <th>BU</th>
@@ -421,9 +412,9 @@ export default function MasterDepartmentPage() {
                       <td colSpan={6}>Tidak ada data department</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.DepartmentId}>
-                        <td>{item.Code}</td>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.Name}</td>
                         <td>{item.divisionName}</td>
                         <td>{item.businessUnitName}</td>
@@ -470,7 +461,7 @@ export default function MasterDepartmentPage() {
           <span className={styles.meta}>Unggah data master department dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-department-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -494,7 +485,7 @@ export default function MasterDepartmentPage() {
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom: Divisi Code, Department Code, Department Name, Status. Download template untuk format yang benar.
+          Format file: Excel (.xlsx/.xls). Kolom: Divisi Name, Department Name, Status. Download template untuk format yang benar.
         </div>
       </section>
 
@@ -526,12 +517,8 @@ export default function MasterDepartmentPage() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Dept Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. ITD-01" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Department Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
+                <label className={styles.label} htmlFor="master-dept-name-input">Department Name</label>
+                <input id="master-dept-name-input" name="departmentName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>

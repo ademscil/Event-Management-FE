@@ -536,7 +536,7 @@ export default function SurveyCreatePage() {
               ...conditionalRequired,
             };
           }
-          if (item.element.type === "likert") return { variant: "likert", rows: item.element.options, ratingScale: item.element.ratingScale ?? 10, ...pageMeta, ...displayCondition, ...conditionalRequired };
+          if (item.element.type === "likert") return { variant: "likert", rows: item.element.options, ratingScale: item.element.ratingScale ?? 10, commentThreshold: item.element.likertCommentThreshold ?? 7, enableComment: item.element.likertEnableComment !== false, ...pageMeta, ...displayCondition, ...conditionalRequired };
           if (item.element.type === "matrix") return { variant: "matrix", columns: item.element.options, ...pageMeta, ...displayCondition, ...conditionalRequired };
           if (item.element.type === "rating") return { ratingScale: resolvedRatingScale, ...pageMeta, ...displayCondition, ...conditionalRequired };
           if (Object.keys(displayCondition).length > 0 || Object.keys(conditionalRequired).length > 0) {

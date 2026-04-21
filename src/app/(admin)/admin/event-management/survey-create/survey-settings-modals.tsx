@@ -228,8 +228,8 @@ export default function SurveySettingsModals({
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHead}>
               <h2>Schedule Settings</h2>
-              <button className={styles.inlineButton} type="button" onClick={() => setShowSchedule(false)}>
-                Close
+              <button className={styles.modalClose} type="button" onClick={() => setShowSchedule(false)} aria-label="Close">
+                ✕
               </button>
             </div>
             <div className={styles.modalBody}>
@@ -293,6 +293,14 @@ export default function SurveySettingsModals({
                 </div>
               </div>
             </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.modalBtnSecondary} type="button" onClick={() => setShowSchedule(false)}>
+                Cancel
+              </button>
+              <button className={styles.modalBtnPrimary} type="button" onClick={() => setShowSchedule(false)}>
+                Save
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -302,8 +310,8 @@ export default function SurveySettingsModals({
           <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHead}>
               <h2>Style Settings</h2>
-              <button className={styles.inlineButton} type="button" onClick={() => setShowStyle(false)}>
-                Close
+              <button className={styles.modalClose} type="button" onClick={() => setShowStyle(false)} aria-label="Close">
+                ✕
               </button>
             </div>
             <div className={styles.modalBody}>
@@ -375,6 +383,14 @@ export default function SurveySettingsModals({
                   <option value="no">No</option>
                 </select>
               </label>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.modalBtnSecondary} type="button" onClick={() => setShowStyle(false)}>
+                Cancel
+              </button>
+              <button className={styles.modalBtnPrimary} type="button" onClick={() => setShowStyle(false)}>
+                Save
+              </button>
             </div>
           </div>
         </div>
