@@ -413,3 +413,31 @@
   .pageHead { flex-direction: column; }
   .toolbar { width: 100%; }
 }
+
+/* ─── Upload error details ───────────────────────────────────────────────── */
+.uploadErrorDetails {
+  margin-top: 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff5f5;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+
+.uploadErrorSummary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #dc2626;
+  user-select: none;
+  list-style: none;
+}
+.uploadErrorSummary::-webkit-details-marker { display: none; }
+.uploadErrorSummary::before { content: "▶ "; font-size: 10px; }
+details[open] .uploadErrorSummary::before { content: "▼ "; }
+
+.uploadErrorList {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: #7f1d1d;
+  line-height: 1.7;
+}

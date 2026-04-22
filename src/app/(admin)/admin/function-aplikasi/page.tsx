@@ -9,6 +9,9 @@ import {
   deleteFunctionApplicationMapping,
   exportFunctionApplicationMappingsCsv,
   fetchFunctionApplicationMappingsDetailed,
+  downloadMappingTemplate,
+  bulkImportMappings,
+  type BulkImportResult,
   type FunctionApplicationMappingItem,
 } from "@/lib/mappings";
 import { fetchApplicationsMaster, fetchFunctionsMaster, type ApplicationMaster, type FunctionMaster } from "@/lib/master-data";
@@ -31,7 +34,10 @@ export default function FunctionAplikasiPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadErrors, setUploadErrors] = useState<BulkImportResult["errors"]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const [searchBy, setSearchBy] = useState("all");
   const [keyword, setKeyword] = useState("");
@@ -261,21 +267,54 @@ export default function FunctionAplikasiPage() {
   };
 
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
-    const file = event.target.files?.[0];
+    const file = event.target.files?.[0] ?? null;
     setUploadFileName(file?.name || "No file chosen");
+    setUploadFile(file);
     setUploadInfo("");
+    setUploadErrors([]);
   };
 
-  const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Mapping Function - Aplikasi belum tersedia.");
+  const onDownloadTemplate = async () => {
+    const result = await downloadMappingTemplate("function-application");
+    if (!result.success || !result.blob) {
+      setUploadInfo("Gagal mengunduh template. Coba lagi.");
+      return;
+    }
+    const url = URL.createObjectURL(result.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "template-mapping-function-aplikasi.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
-  const onUploadMapping = () => {
-    if (uploadFileName === "No file chosen") {
+  const onUploadMapping = async () => {
+    if (!uploadFile) {
       setUploadInfo("Pilih file terlebih dahulu.");
       return;
     }
-    setUploadInfo("Upload bulk Mapping Function - Aplikasi belum tersedia.");
+    setUploading(true);
+    setUploadInfo("");
+    setUploadErrors([]);
+
+    const result = await bulkImportMappings(uploadFile, "function-application");
+    setUploading(false);
+
+    if (!result.success) {
+      setUploadInfo(result.message || "Upload gagal.");
+      setUploadErrors(result.errors ?? []);
+      return;
+    }
+
+    const summary = `Berhasil diimpor: ${result.imported ?? 0} baris. Dilewati: ${result.skipped ?? 0}. Gagal: ${result.failed ?? 0}.`;
+    setUploadInfo(summary);
+    setUploadErrors(result.errors ?? []);
+    setUploadFileName("No file chosen");
+    setUploadFile(null);
+    // Reset file input
+    const input = document.getElementById("function-aplikasi-file") as HTMLInputElement | null;
+    if (input) input.value = "";
+    await load();
   };
 
   return (
@@ -302,14 +341,15 @@ export default function FunctionAplikasiPage() {
         </div>
         <div className={baseStyles.filterBarGrid}>
           <div className={baseStyles.filterField}>
-            <label className={baseStyles.filterLabel}>Status</label>
+            <label id="func-app-filter-label-status" className={baseStyles.filterLabel} htmlFor="func-app-status-filter">Status</label>
             <Dropdown
+              id="func-app-status-filter"
               className={baseStyles.filterSelect}
               fullWidth
               options={[{ value: "all", label: "All" }]}
               value={statusFilter}
               onChange={setStatusFilter}
-              aria-label="Filter status"
+              aria-labelledby="func-app-filter-label-status"
             />
           </div>
         </div>
@@ -404,36 +444,70 @@ export default function FunctionAplikasiPage() {
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Upload Data Mapping</h2>
-          <span className={styles.meta}>Upload file CSV/Excel untuk import data mapping.</span>
+          <span className={styles.meta}>Upload file Excel (.xlsx) untuk import data mapping secara massal.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="function-aplikasi-file">Pilih file Excel</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
                 id="function-aplikasi-file"
                 className={styles.fileInputHidden}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".xlsx,.xls"
                 onChange={onPickUploadFile}
+                aria-describedby="function-aplikasi-upload-note"
               />
               <label className={styles.fileTrigger} htmlFor="function-aplikasi-file">
-                Choose File
+                Pilih File
               </label>
               <span className={styles.fileText}>{uploadFileName}</span>
             </div>
-            <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
+            <button
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              type="button"
+              onClick={() => void onDownloadTemplate()}
+            >
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMapping}>
-              Upload
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              type="button"
+              onClick={() => void onUploadMapping()}
+              disabled={uploading || !uploadFile}
+              aria-busy={uploading}
+            >
+              {uploading ? "Mengupload..." : "Upload"}
             </button>
           </div>
         </div>
-        <div className={styles.uploadNote}>
-          Format upload: CSV/Excel dengan kolom IT Dept Head, Function, Application.
-        </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
+        <p id="function-aplikasi-upload-note" className={styles.uploadNote}>
+          Format: Excel (.xlsx) dengan kolom <strong>Function Code</strong> dan <strong>Application Code</strong>.
+          Download template untuk contoh format yang benar.
+        </p>
+        {uploadInfo ? (
+          <div
+            className={uploadErrors && uploadErrors.length > 0 ? styles.error : styles.meta}
+            role="status"
+            aria-live="polite"
+          >
+            {uploadInfo}
+          </div>
+        ) : null}
+        {uploadErrors && uploadErrors.length > 0 ? (
+          <details className={styles.uploadErrorDetails}>
+            <summary className={styles.uploadErrorSummary}>
+              Lihat detail error ({uploadErrors.length} baris)
+            </summary>
+            <ul className={styles.uploadErrorList}>
+              {uploadErrors.map((err, i) => (
+                <li key={i}>
+                  <strong>Baris {err.row}:</strong> {err.errors.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       {showModal ? (
@@ -468,23 +542,32 @@ export default function FunctionAplikasiPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Function</label>
+                <label id="func-app-modal-label-function" className={styles.label} htmlFor="func-app-modal-function">Function</label>
                 <Dropdown
+                  id="func-app-modal-function"
                   className={styles.input}
                   options={functions.map((item) => ({ value: item.FunctionId, label: item.Name }))}
                   value={selectedFunctionId}
                   onChange={setSelectedFunctionId}
                   placeholder="Pilih Function"
                   disabled={Boolean(editTarget)}
+                  aria-labelledby="func-app-modal-label-function"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Applications</label>
-                <div className={styles.checkboxGrid}>
+                <span id="func-app-modal-label-apps" className={styles.label}>Applications</span>
+                <div className={styles.checkboxGrid} role="group" aria-labelledby="func-app-modal-label-apps">
                   {applications.length === 0 ? <div className={styles.meta}>Tidak ada aplikasi aktif</div> : null}
                   {applications.map((app) => (
                     <label key={app.ApplicationId} className={styles.checkboxItem}>
-                      <input type="checkbox" checked={selectedAppIds.includes(app.ApplicationId)} onChange={() => toggleAppSelection(app.ApplicationId)} />
+                      <input
+                        id={`functionAppSelect-${app.ApplicationId}`}
+                        name="selectedAppIds"
+                        type="checkbox"
+                        value={String(app.ApplicationId)}
+                        checked={selectedAppIds.includes(app.ApplicationId)}
+                        onChange={() => toggleAppSelection(app.ApplicationId)}
+                      />
                       <span>{app.Name}</span>
                     </label>
                   ))}
