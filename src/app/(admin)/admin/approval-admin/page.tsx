@@ -322,7 +322,7 @@ export default function ApprovalAdminPage() {
       <section className={baseStyles.panel}>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -333,7 +333,7 @@ export default function ApprovalAdminPage() {
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth

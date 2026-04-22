@@ -293,6 +293,7 @@ export default function AuditTrailPage() {
               options={ACTION_OPTIONS}
               value={actionFilter}
               onChange={setActionFilter}
+              aria-label="Filter berdasarkan action"
             />
           </div>
           <div>
@@ -303,6 +304,7 @@ export default function AuditTrailPage() {
               options={entityTypeOptions}
               value={entityTypeFilter}
               onChange={setEntityTypeFilter}
+              aria-label="Filter berdasarkan entity type"
             />
           </div>
           <div>

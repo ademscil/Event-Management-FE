@@ -311,11 +311,11 @@ export default function EventManagementPage() {
         <h2 className={styles.panelTitle}>Filter</h2>
         <div className={styles.filterToolbar}>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
-            <label className={styles.filterLabel}>Periode Mulai</label>
+            <label className={styles.filterLabel} htmlFor="evtPeriodStart">Periode Mulai</label>
             <input id="evtPeriodStart" className={styles.filterControl} type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
-            <label className={styles.filterLabel}>Periode Akhir</label>
+            <label className={styles.filterLabel} htmlFor="evtPeriodEnd">Periode Akhir</label>
             <input id="evtPeriodEnd" className={styles.filterControl} type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
@@ -338,12 +338,12 @@ export default function EventManagementPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Nama Event</th>
-                  <th>Admin Event</th>
-                  <th>Periode</th>
-                  <th>Status</th>
-                  <th>Last Edited</th>
-                  {showActionColumn ? <th>Aksi</th> : null}
+                  <th scope="col">Nama Event</th>
+                  <th scope="col">Admin Event</th>
+                  <th scope="col">Periode</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last Edited</th>
+                  {showActionColumn ? <th scope="col">Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -449,11 +449,11 @@ export default function EventManagementPage() {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Delete Event"
+            aria-labelledby="delete-event-modal-title"
           >
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Delete Draft Event</h2>
-              <button className={styles.modalClose} onClick={() => setDeleteTarget(null)} type="button" aria-label="Close">
+              <h2 id="delete-event-modal-title" className={styles.modalTitle}>Delete Draft Event</h2>
+              <button className={styles.modalClose} onClick={() => setDeleteTarget(null)} type="button" aria-label="Tutup modal">
                 x
               </button>
             </div>
@@ -480,11 +480,11 @@ export default function EventManagementPage() {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={feedbackDialog.title}
+            aria-labelledby="feedback-event-modal-title"
           >
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{feedbackDialog.title}</h2>
-              <button className={styles.modalClose} onClick={() => setFeedbackDialog(null)} type="button" aria-label="Close">
+              <h2 id="feedback-event-modal-title" className={styles.modalTitle}>{feedbackDialog.title}</h2>
+              <button className={styles.modalClose} onClick={() => setFeedbackDialog(null)} type="button" aria-label="Tutup modal">
                 x
               </button>
             </div>

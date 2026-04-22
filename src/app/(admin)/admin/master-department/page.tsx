@@ -398,12 +398,12 @@ export default function MasterDepartmentPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>No.</th>
-                    <th>Department Name</th>
-                    <th>Divisi</th>
-                    <th>BU</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">Department Name</th>
+                    <th scope="col">Divisi</th>
+                    <th scope="col">BU</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -491,10 +491,10 @@ export default function MasterDepartmentPage() {
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit Department" : "Add Department"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-dept-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit Department" : "Add Department"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-dept-modal-title" className={styles.modalTitle}>{editing ? "Edit Department" : "Add Department"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>

@@ -592,11 +592,11 @@ export default function ReportSelectionPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="report-modal-title" onClick={(event) => event.stopPropagation()}>
             {modal.type === "confirm-generate" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Generate Report</h3>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Generate Report</h3>
                   <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">✕</button>
                 </header>
                 <div className={styles.modalBody}>
@@ -612,7 +612,7 @@ export default function ReportSelectionPage() {
             {modal.type === "comment-detail" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
                   <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">✕</button>
                 </header>
                 <div className={styles.modalBody}>
@@ -628,7 +628,7 @@ export default function ReportSelectionPage() {
             {modal.type === "export" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Export Report</h3>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Export Report</h3>
                   <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">✕</button>
                 </header>
                 <div className={styles.modalBody}>

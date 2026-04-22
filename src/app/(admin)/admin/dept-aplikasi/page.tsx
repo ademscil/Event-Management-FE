@@ -422,12 +422,12 @@ export default function DeptAplikasiPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>No</th>
-                  <th>Business Unit</th>
-                  <th>Division</th>
-                  <th>Department</th>
-                  <th>Applications</th>
-                  <th>Actions</th>
+                  <th scope="col">No</th>
+                  <th scope="col">Business Unit</th>
+                  <th scope="col">Division</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Applications</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -531,9 +531,9 @@ export default function DeptAplikasiPage() {
             resetForm();
           }}
         >
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editTarget ? "Edit Mapping Department Aplikasi" : "Tambah Mapping Department Aplikasi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="dept-app-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
+              <h2 id="dept-app-modal-title" className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
               <button
                 className={styles.modalClose}
                 type="button"

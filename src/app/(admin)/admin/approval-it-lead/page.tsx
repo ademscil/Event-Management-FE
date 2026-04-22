@@ -232,7 +232,7 @@ export default function ApprovalItLeadPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -243,7 +243,7 @@ export default function ApprovalItLeadPage() {
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth

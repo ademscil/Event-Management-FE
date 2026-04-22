@@ -133,11 +133,11 @@ export default function DashboardPage() {
         <h2 className={styles.panelTitle}>Filter</h2>
         <div className={styles.filterToolbar}>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
-            <label className={styles.filterLabel}>Periode Mulai</label>
+            <label className={styles.filterLabel} htmlFor="dashPeriodStart">Periode Mulai</label>
             <input id="dashPeriodStart" className={styles.filterControl} type="date" aria-label="Tanggal mulai periode" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
-            <label className={styles.filterLabel}>Periode Akhir</label>
+            <label className={styles.filterLabel} htmlFor="dashPeriodEnd">Periode Akhir</label>
             <input id="dashPeriodEnd" className={styles.filterControl} type="date" aria-label="Tanggal akhir periode" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>

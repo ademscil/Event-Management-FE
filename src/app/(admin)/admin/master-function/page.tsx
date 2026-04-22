@@ -298,10 +298,10 @@ export default function MasterFunctionPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>No.</th>
-                    <th>Function Name</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">Function Name</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -387,10 +387,10 @@ export default function MasterFunctionPage() {
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit Function" : "Add Function"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-function-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit Function" : "Add Function"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-function-modal-title" className={styles.modalTitle}>{editing ? "Edit Function" : "Add Function"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>

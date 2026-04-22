@@ -26,9 +26,9 @@ export default function ApprovalItLeadDialogs({
 
   return (
     <div className={styles.modalOverlay} onClick={() => setProposeOpen(false)}>
-      <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Propose takeout" onClick={(event) => event.stopPropagation()}>
+      <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="it-lead-propose-modal-title" onClick={(event) => event.stopPropagation()}>
         <header className={styles.modalHeader}>
-          <h2 className={styles.modalTitle}>Propose Takeout</h2>
+          <h2 id="it-lead-propose-modal-title" className={styles.modalTitle}>Propose Takeout</h2>
           <button type="button" className={styles.closeBtn} onClick={() => setProposeOpen(false)} aria-label="Tutup modal propose takeout">
             x
           </button>

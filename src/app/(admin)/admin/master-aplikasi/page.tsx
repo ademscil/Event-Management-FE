@@ -305,11 +305,11 @@ export default function MasterAplikasiPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>No.</th>
-                    <th>App Name</th>
-                    <th>Description</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">App Name</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -396,10 +396,10 @@ export default function MasterAplikasiPage() {
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit Aplikasi" : "Add Aplikasi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-aplikasi-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit Aplikasi" : "Add Aplikasi"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-aplikasi-modal-title" className={styles.modalTitle}>{editing ? "Edit Aplikasi" : "Add Aplikasi"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>

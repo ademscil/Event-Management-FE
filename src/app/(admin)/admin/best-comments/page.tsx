@@ -185,7 +185,7 @@ export default function BestCommentsPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -195,7 +195,7 @@ export default function BestCommentsPage() {
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -374,9 +374,9 @@ export default function BestCommentsPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail komentar" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="best-comments-modal-title" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Comment Detail</h2>
+              <h2 id="best-comments-modal-title" className={styles.modalTitle}>Comment Detail</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">
                 x
               </button>

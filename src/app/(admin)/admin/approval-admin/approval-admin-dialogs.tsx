@@ -43,9 +43,9 @@ export default function ApprovalAdminDialogs({
     <>
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail responden" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="approval-detail-modal-title" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Detail Responden</h2>
+              <h2 id="approval-detail-modal-title" className={styles.modalTitle}>Detail Responden</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail responden">
                 x
               </button>
@@ -69,9 +69,9 @@ export default function ApprovalAdminDialogs({
 
       {rejectOpen ? (
         <div className={styles.modalOverlay} onClick={() => setRejectOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject response awal" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="approval-reject-modal-title" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Reject Selected Response</h2>
+              <h2 id="approval-reject-modal-title" className={styles.modalTitle}>Reject Selected Response</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)} aria-label="Tutup modal reject response">
                 x
               </button>
@@ -100,9 +100,9 @@ export default function ApprovalAdminDialogs({
 
       {takeoutRejectOpen ? (
         <div className={styles.modalOverlay} onClick={() => setTakeoutRejectOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject takeout" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="approval-takeout-reject-modal-title" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Reject Proposed Takeout</h2>
+              <h2 id="approval-takeout-reject-modal-title" className={styles.modalTitle}>Reject Proposed Takeout</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setTakeoutRejectOpen(false)} aria-label="Tutup modal reject takeout">
                 x
               </button>

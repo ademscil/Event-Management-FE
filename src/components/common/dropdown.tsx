@@ -16,6 +16,7 @@ type DropdownProps = {
   disabled?: boolean;
   placeholder?: string;
   fullWidth?: boolean;
+  "aria-label"?: string;
 };
 
 export function Dropdown({
@@ -26,6 +27,7 @@ export function Dropdown({
   disabled = false,
   placeholder = "Select...",
   fullWidth = false,
+  "aria-label": ariaLabel,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,7 @@ export function Dropdown({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-label={ariaLabel}
       >
         <span className={styles.triggerLabel}>{displayText}</span>
         <svg
