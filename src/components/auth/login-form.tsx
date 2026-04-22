@@ -201,6 +201,7 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
               <div className={styles.methodTabs}>
                 <button
                   type="button"
+                  id="reset-method-email"
                   className={`${styles.methodTab} ${styles.methodTabActive}`}
                   onClick={() => {
                     setResetIdentifier("");
@@ -211,6 +212,7 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
                 </button>
                 <button
                   type="button"
+                  id="reset-method-phone"
                   className={`${styles.methodTab} ${styles.methodTabDisabled}`}
                   disabled
                   title="Reset password via phone dinonaktifkan sementara"
@@ -224,19 +226,22 @@ export default function LoginForm({ nextTarget }: LoginFormProps) {
               </label>
               <input
                 id="forgot-identifier"
+                name="forgot-identifier"
                 className={`${styles.input} ${resetFeedback.error ? styles.inputError : ""}`}
+                type="email"
                 value={resetIdentifier}
                 onChange={(event) => setResetIdentifier(event.target.value)}
                 placeholder="user@company.co.id"
                 autoComplete="email"
+                aria-describedby={resetFeedback.error ? "forgot-error" : "forgot-helper"}
               />
 
-              <p className={styles.helperText}>
+              {resetFeedback.error ? <div id="forgot-error" className={styles.inlineError} role="alert">{resetFeedback.error}</div> : null}
+              {resetFeedback.message ? <div className={styles.inlineSuccess} role="status">{resetFeedback.message}</div> : null}
+
+              <p id="forgot-helper" className={styles.helperText}>
                 Masukkan email terdaftar. Jika cocok untuk user local, link reset akan dikirim ke email tersebut.
               </p>
-
-              {resetFeedback.error ? <div className={styles.inlineError}>{resetFeedback.error}</div> : null}
-              {resetFeedback.message ? <div className={styles.inlineSuccess}>{resetFeedback.message}</div> : null}
 
               <div className={styles.modalActions}>
                 <button className={styles.secondaryButton} type="button" onClick={() => setShowForgotPassword(false)}>
