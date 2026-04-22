@@ -291,6 +291,7 @@ export default function MasterDivisiPage() {
                 options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                 value={buFilter}
                 onChange={setBuFilter}
+                aria-label="Filter business unit"
               />
             </div>
             <div className={styles.filterField}>
@@ -305,6 +306,7 @@ export default function MasterDivisiPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
               />
             </div>
           </div>
@@ -441,6 +443,7 @@ export default function MasterDivisiPage() {
                   options={[{ value: "", label: "Pilih BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                   value={businessUnitId}
                   onChange={setBusinessUnitId}
+                  aria-label="Pilih business unit"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -457,6 +460,7 @@ export default function MasterDivisiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status divisi"
                 />
               </div>
             </div>

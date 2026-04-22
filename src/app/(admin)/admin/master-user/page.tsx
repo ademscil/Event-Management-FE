@@ -437,15 +437,15 @@ export default function MasterUserPage() {
           <div className={styles.filterToolbar}>
             <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
               <label className={styles.filterLabel}>Role</label>
-              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Role" }, { value: "SuperAdmin", label: "Super Admin" }, { value: "AdminEvent", label: "Admin Event" }, { value: "ITLead", label: "IT Lead" }, { value: "DepartmentHead", label: "Dept Head" }]} value={roleFilter} onChange={setRoleFilter} />
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Role" }, { value: "SuperAdmin", label: "Super Admin" }, { value: "AdminEvent", label: "Admin Event" }, { value: "ITLead", label: "IT Lead" }, { value: "DepartmentHead", label: "Dept Head" }]} value={roleFilter} onChange={setRoleFilter} aria-label="Filter role" />
             </div>
             <div className={`${styles.filterGroup} ${styles.filterGroupLg}`}>
               <label className={styles.filterLabel}>Department</label>
-              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Department" }, ...filterDepartments.map((d) => ({ value: d.DepartmentId, label: d.Name }))]} value={departmentFilter} onChange={setDepartmentFilter} />
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Department" }, ...filterDepartments.map((d) => ({ value: d.DepartmentId, label: d.Name }))]} value={departmentFilter} onChange={setDepartmentFilter} aria-label="Filter department" />
             </div>
             <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
               <label className={styles.filterLabel}>Status</label>
-              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} value={statusFilter} onChange={setStatusFilter} />
+              <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }]} value={statusFilter} onChange={setStatusFilter} aria-label="Filter status" />
             </div>
             <SearchBar options={[{ value: "all", label: "Search By" }, { value: "npk", label: "NPK" }, { value: "username", label: "Username" }, { value: "name", label: "Name" }, { value: "email", label: "Email" }, { value: "role", label: "Role" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} buttonType="submit" placeholder="Cari user..." trailingContent={(<button className={styles.masterDownloadButton} type="button" onClick={onDownload}>Download</button>)} />
           </div>

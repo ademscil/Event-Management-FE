@@ -94,7 +94,7 @@ export default function CreateEventModal(props: CreateEventModalProps) {
             <>
               <div className={styles.formGroup}>
                 <label className={styles.label} htmlFor="surveyName">Survey Name *</label>
-                <input id="surveyName" className={styles.input} value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="e.g. Survey Corp IT & BPM 2026" type="text" />
+                <input id="surveyName" name="surveyName" className={styles.input} value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="e.g. Survey Corp IT & BPM 2026" type="text" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label} htmlFor="surveyAdminEvent">Admin Event Target *</label>
@@ -109,6 +109,7 @@ export default function CreateEventModal(props: CreateEventModalProps) {
                   ))}
                   <input
                     id="surveyAdminEvent"
+                    name="surveyAdminEvent"
                     className={styles.chipInput}
                     value={adminEventInput}
                     onChange={(event) => {
@@ -151,7 +152,7 @@ export default function CreateEventModal(props: CreateEventModalProps) {
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label} htmlFor="surveyDesc">Description</label>
-                <textarea id="surveyDesc" className={styles.textarea} value={draftDescription} onChange={(event) => setDraftDescription(event.target.value)} placeholder="Jelaskan tujuan survey secara singkat" rows={3} />
+                <textarea id="surveyDesc" name="surveyDesc" className={styles.textarea} value={draftDescription} onChange={(event) => setDraftDescription(event.target.value)} placeholder="Jelaskan tujuan survey secara singkat" rows={3} />
               </div>
             </>
           )}

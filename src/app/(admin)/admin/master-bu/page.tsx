@@ -270,6 +270,7 @@ export default function MasterBUPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
               />
             </div>
           </div>
@@ -411,6 +412,7 @@ export default function MasterBUPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status BU"
                 />
               </div>
             </div>

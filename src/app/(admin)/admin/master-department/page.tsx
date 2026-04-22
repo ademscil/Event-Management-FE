@@ -342,6 +342,7 @@ export default function MasterDepartmentPage() {
                 options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                 value={buFilter}
                 onChange={setBuFilter}
+                aria-label="Filter business unit"
               />
             </div>
             <div className={styles.filterField}>
@@ -352,6 +353,7 @@ export default function MasterDepartmentPage() {
                 options={[{ value: "all", label: "All Divisi" }, ...divisionFilterOptions.map((item) => ({ value: item.DivisionId, label: item.Name }))]}
                 value={divisionFilter}
                 onChange={setDivisionFilter}
+                aria-label="Filter divisi"
               />
             </div>
             <div className={styles.filterField}>
@@ -366,6 +368,7 @@ export default function MasterDepartmentPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
               />
             </div>
           </div>
@@ -504,6 +507,7 @@ export default function MasterDepartmentPage() {
                   options={[{ value: "", label: "Pilih BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                   value={businessUnitId}
                   onChange={setBusinessUnitId}
+                  aria-label="Pilih business unit"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -514,6 +518,7 @@ export default function MasterDepartmentPage() {
                   value={divisionId}
                   onChange={setDivisionId}
                   disabled={!businessUnitId}
+                  aria-label="Pilih divisi"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -530,6 +535,7 @@ export default function MasterDepartmentPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status department"
                 />
               </div>
             </div>

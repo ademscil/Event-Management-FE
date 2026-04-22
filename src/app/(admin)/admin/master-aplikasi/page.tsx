@@ -273,6 +273,7 @@ export default function MasterAplikasiPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
               />
             </div>
           </div>
@@ -407,8 +408,8 @@ export default function MasterAplikasiPage() {
                 <input id="master-app-name-input" name="appName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. B2B Ordering" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Description</label>
-                <textarea className={styles.textarea} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Deskripsi aplikasi" />
+                <label className={styles.label} htmlFor="master-app-desc-input">Description</label>
+                <textarea id="master-app-desc-input" name="appDescription" className={styles.textarea} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Deskripsi aplikasi" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>
@@ -420,6 +421,7 @@ export default function MasterAplikasiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status aplikasi"
                 />
               </div>
             </div>

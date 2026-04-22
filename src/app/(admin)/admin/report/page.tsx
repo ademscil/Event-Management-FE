@@ -364,6 +364,7 @@ export default function ReportSelectionPage() {
               options={eventStatusOptions}
               value={eventStatusFilter}
               onChange={setEventStatusFilter}
+              aria-label="Filter status event"
             />
           </div>
           <SearchBar
@@ -500,6 +501,7 @@ export default function ReportSelectionPage() {
               options={surveyFilterOptions}
               value={selectedTakeoutSurvey}
               onChange={setSelectedTakeoutSurvey}
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
@@ -510,6 +512,7 @@ export default function ReportSelectionPage() {
               options={functionOptions}
               value={selectedFunctionId}
               onChange={setSelectedFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>

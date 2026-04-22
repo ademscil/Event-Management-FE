@@ -330,6 +330,7 @@ export default function ApprovalAdminPage() {
               value={surveyId}
               onChange={setSurveyId}
               placeholder="Pilih survey"
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
@@ -340,6 +341,7 @@ export default function ApprovalAdminPage() {
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>

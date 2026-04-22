@@ -266,6 +266,7 @@ export default function MasterFunctionPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
               />
             </div>
           </div>
@@ -357,7 +358,7 @@ export default function MasterFunctionPage() {
           <span className={styles.meta}>Unggah data master function dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label} htmlFor="master-function-upload-label">Pilih file</label>
+          <label className={styles.label} htmlFor="master-function-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -407,6 +408,7 @@ export default function MasterFunctionPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status function"
                 />
               </div>
             </div>

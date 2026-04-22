@@ -146,6 +146,7 @@ export default function MasterUserFormModal({
                 </label>
                 <input
                   id="mu-username"
+                  name="username"
                   className={modalStyles.input}
                   placeholder="contoh: adam.cid00676"
                   value={newUsername}
@@ -160,6 +161,7 @@ export default function MasterUserFormModal({
                   </label>
                   <input
                     id="mu-password"
+                    name="password"
                     className={modalStyles.input}
                     placeholder={editingUser ? "Kosongkan jika tidak diubah" : "Min. 8 karakter"}
                     type="password"
@@ -181,6 +183,7 @@ export default function MasterUserFormModal({
                 </label>
                 <input
                   id="mu-npk"
+                  name="npk"
                   className={modalStyles.input}
                   placeholder="Nomor NPK"
                   value={newNpk}
@@ -194,6 +197,7 @@ export default function MasterUserFormModal({
                 </label>
                 <input
                   id="mu-name"
+                  name="displayName"
                   className={modalStyles.input}
                   placeholder="Nama lengkap user"
                   value={newDisplayName}
@@ -207,6 +211,7 @@ export default function MasterUserFormModal({
                 </label>
                 <input
                   id="mu-email"
+                  name="email"
                   className={modalStyles.input}
                   placeholder="user@astraotoparts.co.id"
                   type="email"
@@ -221,6 +226,7 @@ export default function MasterUserFormModal({
                 </label>
                 <input
                   id="mu-phone"
+                  name="phoneNumber"
                   className={modalStyles.input}
                   placeholder="6281234567890"
                   value={newPhoneNumber}

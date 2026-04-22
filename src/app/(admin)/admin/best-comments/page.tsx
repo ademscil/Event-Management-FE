@@ -192,6 +192,7 @@ export default function BestCommentsPage() {
               options={surveyDropdownOptions}
               value={surveyId}
               onChange={setSurveyId}
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
@@ -202,6 +203,7 @@ export default function BestCommentsPage() {
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>

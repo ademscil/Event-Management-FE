@@ -309,6 +309,7 @@ export default function FunctionAplikasiPage() {
               options={[{ value: "all", label: "All" }]}
               value={statusFilter}
               onChange={setStatusFilter}
+              aria-label="Filter status"
             />
           </div>
         </div>

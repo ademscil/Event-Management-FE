@@ -312,15 +312,15 @@ export default function EventManagementPage() {
         <div className={styles.filterToolbar}>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
             <label className={styles.filterLabel} htmlFor="evtPeriodStart">Periode Mulai</label>
-            <input id="evtPeriodStart" className={styles.filterControl} type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+            <input id="evtPeriodStart" name="evtPeriodStart" className={styles.filterControl} type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
             <label className={styles.filterLabel} htmlFor="evtPeriodEnd">Periode Akhir</label>
-            <input id="evtPeriodEnd" className={styles.filterControl} type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+            <input id="evtPeriodEnd" name="evtPeriodEnd" className={styles.filterControl} type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
             <label className={styles.filterLabel}>Status</label>
-            <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "draft", label: "Draft" }, { value: "design", label: "In Design" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} />
+            <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "draft", label: "Draft" }, { value: "design", label: "In Design" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} aria-label="Filter status event" />
           </div>
           <SearchBar options={[{ value: "all", label: "Search By" }, { value: "event", label: "Event Name" }, { value: "admin", label: "Admin Event" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} onButtonClick={onApplySearch} placeholder="Cari event..." />
         </div>
