@@ -335,30 +335,33 @@ export default function MasterDepartmentPage() {
         <form onSubmit={onSearch}>
           <div className={styles.filterBarGrid}>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>BU</label>
+              <label id="mdept-bu-label" className={styles.filterLabel} htmlFor="mdept-bu-dropdown">BU</label>
               <Dropdown
+                id="mdept-bu-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                 value={buFilter}
                 onChange={setBuFilter}
-                aria-label="Filter business unit"
+                aria-labelledby="mdept-bu-label"
               />
             </div>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Divisi</label>
+              <label id="mdept-div-label" className={styles.filterLabel} htmlFor="mdept-div-dropdown">Divisi</label>
               <Dropdown
+                id="mdept-div-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[{ value: "all", label: "All Divisi" }, ...divisionFilterOptions.map((item) => ({ value: item.DivisionId, label: item.Name }))]}
                 value={divisionFilter}
                 onChange={setDivisionFilter}
-                aria-label="Filter divisi"
+                aria-labelledby="mdept-div-label"
               />
             </div>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Status</label>
+              <label id="mdept-status-label" className={styles.filterLabel} htmlFor="mdept-status-dropdown">Status</label>
               <Dropdown
+                id="mdept-status-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[
@@ -368,7 +371,7 @@ export default function MasterDepartmentPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
-                aria-label="Filter status"
+                aria-labelledby="mdept-status-label"
               />
             </div>
           </div>
@@ -501,24 +504,26 @@ export default function MasterDepartmentPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>BU</label>
+                <label id="mdept-modal-bu-label" className={styles.label} htmlFor="mdept-modal-bu-dropdown">BU</label>
                 <Dropdown
+                  id="mdept-modal-bu-dropdown"
                   className={styles.select}
                   options={[{ value: "", label: "Pilih BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                   value={businessUnitId}
                   onChange={setBusinessUnitId}
-                  aria-label="Pilih business unit"
+                  aria-labelledby="mdept-modal-bu-label"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Divisi</label>
+                <label id="mdept-modal-div-label" className={styles.label} htmlFor="mdept-modal-div-dropdown">Divisi</label>
                 <Dropdown
+                  id="mdept-modal-div-dropdown"
                   className={styles.select}
                   options={[{ value: "", label: "Pilih Divisi" }, ...modalDivisions.map((item) => ({ value: item.DivisionId, label: item.Name }))]}
                   value={divisionId}
                   onChange={setDivisionId}
                   disabled={!businessUnitId}
-                  aria-label="Pilih divisi"
+                  aria-labelledby="mdept-modal-div-label"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -526,8 +531,9 @@ export default function MasterDepartmentPage() {
                 <input id="master-dept-name-input" name="departmentName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mdept-modal-status-label" className={styles.label} htmlFor="mdept-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mdept-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -535,7 +541,7 @@ export default function MasterDepartmentPage() {
                   ]}
                   value={active}
                   onChange={setActive}
-                  aria-label="Status department"
+                  aria-labelledby="mdept-modal-status-label"
                 />
               </div>
             </div>

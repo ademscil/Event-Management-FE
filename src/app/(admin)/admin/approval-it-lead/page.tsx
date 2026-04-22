@@ -232,26 +232,28 @@ export default function ApprovalItLeadPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Survey</label>
+            <label id="itlead-survey-label" className={baseStyles.label} htmlFor="itlead-survey-dropdown">Survey</label>
             <Dropdown
+              id="itlead-survey-dropdown"
               className={baseStyles.select}
               fullWidth
               options={surveyDropdownOptions}
               value={surveyId}
               onChange={setSurveyId}
               placeholder="Pilih survey"
-              aria-label="Pilih survey"
+              aria-labelledby="itlead-survey-label"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Function</label>
+            <label id="itlead-function-label" className={baseStyles.label} htmlFor="itlead-function-dropdown">Function</label>
             <Dropdown
+              id="itlead-function-dropdown"
               className={baseStyles.select}
               fullWidth
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
-              aria-label="Filter function"
+              aria-labelledby="itlead-function-label"
             />
           </div>
         </div>

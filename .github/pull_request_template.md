@@ -1,6 +1,6 @@
 ## Deskripsi
 
-<!-- Jelaskan perubahan yang dilakukan secara singkat -->
+<!-- Jelaskan perubahan yang dilakukan dan alasannya -->
 
 ## Tipe Perubahan
 
@@ -8,16 +8,16 @@
 - [ ] Feature baru
 - [ ] Refactor / improvement
 - [ ] Dokumentasi
-- [ ] CI/CD / config
+- [ ] CI/CD / konfigurasi
 
 ## Checklist
 
 - [ ] Kode sudah di-lint (`npm run lint`) tanpa error
 - [ ] Type check lulus (`npx tsc --noEmit`)
 - [ ] Build berhasil (`npm run build`)
-- [ ] Tidak ada label form yang hilang (no label associated with a form field)
-- [ ] Sudah ditest secara manual di browser
-- [ ] Tidak ada console.error / warning baru yang tidak disengaja
+- [ ] Tidak ada `console.log` yang tertinggal di production code
+- [ ] Semua form field memiliki label yang terasosiasi (`htmlFor` / `aria-labelledby`)
+- [ ] Tidak ada breaking change pada API / komponen yang digunakan halaman lain
 
 ## Screenshot (jika ada perubahan UI)
 

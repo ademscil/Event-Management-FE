@@ -262,8 +262,9 @@ export default function MasterAplikasiPage() {
         <form onSubmit={onSearch}>
           <div className={styles.filterBarGrid}>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Status</label>
+              <label id="mapp-status-label" className={styles.filterLabel} htmlFor="mapp-status-dropdown">Status</label>
               <Dropdown
+                id="mapp-status-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[
@@ -273,7 +274,7 @@ export default function MasterAplikasiPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
-                aria-label="Filter status"
+                aria-labelledby="mapp-status-label"
               />
             </div>
           </div>
@@ -412,8 +413,9 @@ export default function MasterAplikasiPage() {
                 <textarea id="master-app-desc-input" name="appDescription" className={styles.textarea} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Deskripsi aplikasi" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mapp-modal-status-label" className={styles.label} htmlFor="mapp-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mapp-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -421,7 +423,7 @@ export default function MasterAplikasiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
-                  aria-label="Status aplikasi"
+                  aria-labelledby="mapp-modal-status-label"
                 />
               </div>
             </div>

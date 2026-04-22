@@ -259,8 +259,9 @@ export default function MasterBUPage() {
         <form onSubmit={onSearch}>
           <div className={styles.filterBarGrid}>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Status</label>
+              <label id="mbu-status-label" className={styles.filterLabel} htmlFor="mbu-status-dropdown">Status</label>
               <Dropdown
+                id="mbu-status-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[
@@ -270,7 +271,7 @@ export default function MasterBUPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
-                aria-label="Filter status"
+                aria-labelledby="mbu-status-label"
               />
             </div>
           </div>
@@ -403,8 +404,9 @@ export default function MasterBUPage() {
                 <input id="master-bu-name-input" name="buName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Corporate HO" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mbu-modal-status-label" className={styles.label} htmlFor="mbu-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mbu-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -412,7 +414,7 @@ export default function MasterBUPage() {
                   ]}
                   value={active}
                   onChange={setActive}
-                  aria-label="Status BU"
+                  aria-labelledby="mbu-modal-status-label"
                 />
               </div>
             </div>

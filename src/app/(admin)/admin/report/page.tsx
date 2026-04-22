@@ -357,14 +357,15 @@ export default function ReportSelectionPage() {
         </div>
         <div className={baseStyles.filterToolbar}>
           <div className={`${baseStyles.filterGroup} ${baseStyles.filterGroupMd}`}>
-            <label className={baseStyles.filterLabel}>Status</label>
+            <label id="rpt-status-label" className={baseStyles.filterLabel} htmlFor="rpt-status-dropdown">Status</label>
             <Dropdown
+              id="rpt-status-dropdown"
               className={baseStyles.filterControl}
               fullWidth
               options={eventStatusOptions}
               value={eventStatusFilter}
               onChange={setEventStatusFilter}
-              aria-label="Filter status event"
+              aria-labelledby="rpt-status-label"
             />
           </div>
           <SearchBar
@@ -494,25 +495,27 @@ export default function ReportSelectionPage() {
         </div>
         <div className={`${baseStyles.filterGrid} ${styles.comparisonFilterGrid}`}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Survey</label>
+            <label id="rpt-survey-label" className={baseStyles.label} htmlFor="rpt-survey-dropdown">Survey</label>
             <Dropdown
+              id="rpt-survey-dropdown"
               className={baseStyles.select}
               fullWidth
               options={surveyFilterOptions}
               value={selectedTakeoutSurvey}
               onChange={setSelectedTakeoutSurvey}
-              aria-label="Pilih survey"
+              aria-labelledby="rpt-survey-label"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Function</label>
+            <label id="rpt-function-label" className={baseStyles.label} htmlFor="rpt-function-dropdown">Function</label>
             <Dropdown
+              id="rpt-function-dropdown"
               className={baseStyles.select}
               fullWidth
               options={functionOptions}
               value={selectedFunctionId}
               onChange={setSelectedFunctionId}
-              aria-label="Filter function"
+              aria-labelledby="rpt-function-label"
             />
           </div>
         </div>

@@ -286,25 +286,27 @@ export default function AuditTrailPage() {
 
         <div className={styles.filterGrid} style={{ marginTop: 14 }}>
           <div>
-            <label className={styles.filterLabel}>Action</label>
+            <label id="audit-action-label" className={styles.filterLabel} htmlFor="audit-action-dropdown">Action</label>
             <Dropdown
+              id="audit-action-dropdown"
               className={styles.filterSelect}
               fullWidth
               options={ACTION_OPTIONS}
               value={actionFilter}
               onChange={setActionFilter}
-              aria-label="Filter berdasarkan action"
+              aria-labelledby="audit-action-label"
             />
           </div>
           <div>
-            <label className={styles.filterLabel}>Entity Type</label>
+            <label id="audit-entity-label" className={styles.filterLabel} htmlFor="audit-entity-dropdown">Entity Type</label>
             <Dropdown
+              id="audit-entity-dropdown"
               className={styles.filterSelect}
               fullWidth
               options={entityTypeOptions}
               value={entityTypeFilter}
               onChange={setEntityTypeFilter}
-              aria-label="Filter berdasarkan entity type"
+              aria-labelledby="audit-entity-label"
             />
           </div>
           <div>

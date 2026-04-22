@@ -284,19 +284,21 @@ export default function MasterDivisiPage() {
         <form onSubmit={onSearch}>
           <div className={styles.filterBarGrid}>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>BU</label>
+              <label id="mdiv-bu-label" className={styles.filterLabel} htmlFor="mdiv-bu-dropdown">BU</label>
               <Dropdown
+                id="mdiv-bu-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                 value={buFilter}
                 onChange={setBuFilter}
-                aria-label="Filter business unit"
+                aria-labelledby="mdiv-bu-label"
               />
             </div>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Status</label>
+              <label id="mdiv-status-label" className={styles.filterLabel} htmlFor="mdiv-status-dropdown">Status</label>
               <Dropdown
+                id="mdiv-status-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[
@@ -306,7 +308,7 @@ export default function MasterDivisiPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
-                aria-label="Filter status"
+                aria-labelledby="mdiv-status-label"
               />
             </div>
           </div>
@@ -437,13 +439,14 @@ export default function MasterDivisiPage() {
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>BU</label>
+                <label id="mdiv-modal-bu-label" className={styles.label} htmlFor="mdiv-modal-bu-dropdown">BU</label>
                 <Dropdown
+                  id="mdiv-modal-bu-dropdown"
                   className={styles.select}
                   options={[{ value: "", label: "Pilih BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                   value={businessUnitId}
                   onChange={setBusinessUnitId}
-                  aria-label="Pilih business unit"
+                  aria-labelledby="mdiv-modal-bu-label"
                 />
               </div>
               <div className={styles.formGroup}>
@@ -451,8 +454,9 @@ export default function MasterDivisiPage() {
                 <input id="master-divisi-name-input" name="divisiName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mdiv-modal-status-label" className={styles.label} htmlFor="mdiv-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mdiv-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -460,7 +464,7 @@ export default function MasterDivisiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
-                  aria-label="Status divisi"
+                  aria-labelledby="mdiv-modal-status-label"
                 />
               </div>
             </div>

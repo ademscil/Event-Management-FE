@@ -141,8 +141,8 @@ export default function DashboardPage() {
             <input id="dashPeriodEnd" name="dashPeriodEnd" className={styles.filterControl} type="date" aria-label="Tanggal akhir periode" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
-            <label className={styles.filterLabel}>Status</label>
-            <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} aria-label="Filter status event" />
+            <label id="dash-status-label" className={styles.filterLabel} htmlFor="dash-status-dropdown">Status</label>
+            <Dropdown id="dash-status-dropdown" className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} aria-labelledby="dash-status-label" />
           </div>
           <SearchBar options={[{ value: "all", label: "Search By" }, { value: "event", label: "Event" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} onButtonClick={onApplySearch} placeholder="Cari event..." />
         </div>

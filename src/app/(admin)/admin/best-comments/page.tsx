@@ -185,25 +185,27 @@ export default function BestCommentsPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Survey</label>
+            <label id="bc-survey-label" className={baseStyles.label} htmlFor="bc-survey-dropdown">Survey</label>
             <Dropdown
+              id="bc-survey-dropdown"
               className={baseStyles.select}
               fullWidth
               options={surveyDropdownOptions}
               value={surveyId}
               onChange={setSurveyId}
-              aria-label="Pilih survey"
+              aria-labelledby="bc-survey-label"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Function</label>
+            <label id="bc-function-label" className={baseStyles.label} htmlFor="bc-function-dropdown">Function</label>
             <Dropdown
+              id="bc-function-dropdown"
               className={baseStyles.select}
               fullWidth
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
-              aria-label="Filter function"
+              aria-labelledby="bc-function-label"
             />
           </div>
         </div>

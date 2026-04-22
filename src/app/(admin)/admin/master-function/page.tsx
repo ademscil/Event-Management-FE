@@ -255,8 +255,9 @@ export default function MasterFunctionPage() {
         <form onSubmit={onSearch}>
           <div className={styles.filterBarGrid}>
             <div className={styles.filterField}>
-              <label className={styles.filterLabel}>Status</label>
+              <label id="mfunc-status-label" className={styles.filterLabel} htmlFor="mfunc-status-dropdown">Status</label>
               <Dropdown
+                id="mfunc-status-dropdown"
                 className={styles.filterSelect}
                 fullWidth
                 options={[
@@ -266,7 +267,7 @@ export default function MasterFunctionPage() {
                 ]}
                 value={statusFilter}
                 onChange={(value) => setStatusFilter(value as FilterStatus)}
-                aria-label="Filter status"
+                aria-labelledby="mfunc-status-label"
               />
             </div>
           </div>
@@ -399,8 +400,9 @@ export default function MasterFunctionPage() {
                 <input id="master-function-name-input" name="functionName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Infrastructure" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mfunc-modal-status-label" className={styles.label} htmlFor="mfunc-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mfunc-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -408,7 +410,7 @@ export default function MasterFunctionPage() {
                   ]}
                   value={active}
                   onChange={setActive}
-                  aria-label="Status function"
+                  aria-labelledby="mfunc-modal-status-label"
                 />
               </div>
             </div>
