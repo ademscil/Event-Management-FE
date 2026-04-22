@@ -2,16 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import {
   createFunctionApplicationMapping,
   deleteFunctionApplicationMapping,
   exportFunctionApplicationMappingsCsv,
   fetchFunctionApplicationMappingsDetailed,
+  downloadMappingTemplate,
+  bulkImportMappings,
+  type BulkImportResult,
   type FunctionApplicationMappingItem,
 } from "@/lib/mappings";
 import { fetchApplicationsMaster, fetchFunctionsMaster, type ApplicationMaster, type FunctionMaster } from "@/lib/master-data";
 import styles from "../mapping-pages.module.css";
+import baseStyles from "../page-mockup.module.css";
 
 type DeleteTarget =
   | { type: "row"; row: FunctionApplicationMappingItem }
@@ -29,11 +34,16 @@ export default function FunctionAplikasiPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadErrors, setUploadErrors] = useState<BulkImportResult["errors"]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  const [filterHead, setFilterHead] = useState("");
-  const [filterFunction, setFilterFunction] = useState("");
-  const [filterApplication, setFilterApplication] = useState("");
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
   const [selectedFunctionId, setSelectedFunctionId] = useState("");
@@ -68,6 +78,8 @@ export default function FunctionAplikasiPage() {
     let active = true;
 
     (async () => {
+      setLoading(true);
+
       const [mappingRes, functionRes, appRes] = await Promise.all([
         fetchFunctionApplicationMappingsDetailed(),
         fetchFunctionsMaster(),
@@ -95,18 +107,36 @@ export default function FunctionAplikasiPage() {
   }, []);
 
   const filteredRows = useMemo(() => {
-    const headTerm = filterHead.trim().toLowerCase();
-    const functionTerm = filterFunction.trim().toLowerCase();
-    const appTerm = filterApplication.trim().toLowerCase();
+    const term = appliedKeyword.trim().toLowerCase();
 
     return rows.filter((row) => {
-      const mappedHeadName = "-";
-      if (headTerm && !mappedHeadName.toLowerCase().includes(headTerm)) return false;
-      if (functionTerm && !row.functionName.toLowerCase().includes(functionTerm)) return false;
-      if (appTerm && !row.applications.some((app) => app.applicationName.toLowerCase().includes(appTerm))) return false;
+      const itLeadName = row.itLeadName || "";
+      if (!term) return true;
+
+      if (appliedSearchBy === "head") {
+        return itLeadName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "function") {
+        return row.functionName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "application") {
+        return row.applications.some((app) => app.applicationName.toLowerCase().includes(term));
+      }
+
+      const haystacks = [
+        itLeadName,
+        row.functionName,
+        ...row.applications.map((app) => app.applicationName),
+      ];
+      if (!haystacks.some((value) => String(value || "").toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [rows, filterHead, filterFunction, filterApplication]);
+  }, [rows, appliedKeyword, appliedSearchBy]);
+
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
 
   const toggleAppSelection = (applicationId: string) => {
     setSelectedAppIds((prev) =>
@@ -237,21 +267,54 @@ export default function FunctionAplikasiPage() {
   };
 
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
-    const file = event.target.files?.[0];
+    const file = event.target.files?.[0] ?? null;
     setUploadFileName(file?.name || "No file chosen");
+    setUploadFile(file);
     setUploadInfo("");
+    setUploadErrors([]);
   };
 
-  const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Mapping Function - Aplikasi belum tersedia.");
+  const onDownloadTemplate = async () => {
+    const result = await downloadMappingTemplate("function-application");
+    if (!result.success || !result.blob) {
+      setUploadInfo("Gagal mengunduh template. Coba lagi.");
+      return;
+    }
+    const url = URL.createObjectURL(result.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "template-mapping-function-aplikasi.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
-  const onUploadMapping = () => {
-    if (uploadFileName === "No file chosen") {
+  const onUploadMapping = async () => {
+    if (!uploadFile) {
       setUploadInfo("Pilih file terlebih dahulu.");
       return;
     }
-    setUploadInfo("Upload bulk Mapping Function - Aplikasi belum tersedia.");
+    setUploading(true);
+    setUploadInfo("");
+    setUploadErrors([]);
+
+    const result = await bulkImportMappings(uploadFile, "function-application");
+    setUploading(false);
+
+    if (!result.success) {
+      setUploadInfo(result.message || "Upload gagal.");
+      setUploadErrors(result.errors ?? []);
+      return;
+    }
+
+    const summary = `Berhasil diimpor: ${result.imported ?? 0} baris. Dilewati: ${result.skipped ?? 0}. Gagal: ${result.failed ?? 0}.`;
+    setUploadInfo(summary);
+    setUploadErrors(result.errors ?? []);
+    setUploadFileName("No file chosen");
+    setUploadFile(null);
+    // Reset file input
+    const input = document.getElementById("function-aplikasi-file") as HTMLInputElement | null;
+    if (input) input.value = "";
+    await load();
   };
 
   return (
@@ -276,27 +339,39 @@ export default function FunctionAplikasiPage() {
           <h2 className={styles.panelTitle}>Filter Data</h2>
           <div className={styles.meta}>Total: {filteredRows.length} records</div>
         </div>
-        <div className={styles.filterGrid3}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>IT Dept Head</label>
-            <input className={styles.input} value={filterHead} onChange={(event) => setFilterHead(event.target.value)} placeholder="Cari IT Dept Head" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Function</label>
-            <input className={styles.input} value={filterFunction} onChange={(event) => setFilterFunction(event.target.value)} placeholder="Cari Function" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Application</label>
-            <input className={styles.input} value={filterApplication} onChange={(event) => setFilterApplication(event.target.value)} placeholder="Cari Application" />
+        <div className={baseStyles.filterBarGrid}>
+          <div className={baseStyles.filterField}>
+            <label id="func-app-filter-label-status" className={baseStyles.filterLabel} htmlFor="func-app-status-filter">Status</label>
+            <Dropdown
+              id="func-app-status-filter"
+              className={baseStyles.filterSelect}
+              fullWidth
+              options={[{ value: "all", label: "All" }]}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              aria-labelledby="func-app-filter-label-status"
+            />
           </div>
         </div>
+        <SearchBar
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "head", label: "IT Lead" },
+            { value: "function", label: "Function" },
+            { value: "application", label: "Application" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Data Mapping Function - Aplikasi</h2>
         </div>
-        <div className={styles.alert}>Kolom IT Dept Head sementara ditampilkan `-` karena data relasi belum tersedia dari endpoint backend.</div>
         {error ? <div className={styles.error}>{error}</div> : null}
         {loading ? <div className={styles.meta}>Memuat data...</div> : null}
         {!loading ? (
@@ -304,11 +379,11 @@ export default function FunctionAplikasiPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>No</th>
-                  <th>IT Dept Head</th>
-                  <th>Function</th>
-                  <th>Applications</th>
-                  <th>Actions</th>
+                  <th scope="col">No</th>
+                  <th scope="col">IT Lead</th>
+                  <th scope="col">Function</th>
+                  <th scope="col">Applications</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,7 +397,7 @@ export default function FunctionAplikasiPage() {
                   filteredRows.map((row, index) => (
                     <tr key={row.functionId}>
                       <td>{index + 1}</td>
-                      <td>-</td>
+                      <td>{row.itLeadName || "-"}</td>
                       <td>{row.functionName}</td>
                       <td>
                         <div className={styles.tags}>
@@ -369,36 +444,70 @@ export default function FunctionAplikasiPage() {
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Upload Data Mapping</h2>
-          <span className={styles.meta}>Upload file CSV/Excel untuk import data mapping.</span>
+          <span className={styles.meta}>Upload file Excel (.xlsx) untuk import data mapping secara massal.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="function-aplikasi-file">Pilih file Excel</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
                 id="function-aplikasi-file"
                 className={styles.fileInputHidden}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".xlsx,.xls"
                 onChange={onPickUploadFile}
+                aria-describedby="function-aplikasi-upload-note"
               />
               <label className={styles.fileTrigger} htmlFor="function-aplikasi-file">
-                Choose File
+                Pilih File
               </label>
               <span className={styles.fileText}>{uploadFileName}</span>
             </div>
-            <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
+            <button
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              type="button"
+              onClick={() => void onDownloadTemplate()}
+            >
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMapping}>
-              Upload
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              type="button"
+              onClick={() => void onUploadMapping()}
+              disabled={uploading || !uploadFile}
+              aria-busy={uploading}
+            >
+              {uploading ? "Mengupload..." : "Upload"}
             </button>
           </div>
         </div>
-        <div className={styles.uploadNote}>
-          Format upload: CSV/Excel dengan kolom IT Dept Head, Function, Application.
-        </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
+        <p id="function-aplikasi-upload-note" className={styles.uploadNote}>
+          Format: Excel (.xlsx) dengan kolom <strong>Function Code</strong> dan <strong>Application Code</strong>.
+          Download template untuk contoh format yang benar.
+        </p>
+        {uploadInfo ? (
+          <div
+            className={uploadErrors && uploadErrors.length > 0 ? styles.error : styles.meta}
+            role="status"
+            aria-live="polite"
+          >
+            {uploadInfo}
+          </div>
+        ) : null}
+        {uploadErrors && uploadErrors.length > 0 ? (
+          <details className={styles.uploadErrorDetails}>
+            <summary className={styles.uploadErrorSummary}>
+              Lihat detail error ({uploadErrors.length} baris)
+            </summary>
+            <ul className={styles.uploadErrorList}>
+              {uploadErrors.map((err, i) => (
+                <li key={i}>
+                  <strong>Baris {err.row}:</strong> {err.errors.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       {showModal ? (
@@ -413,12 +522,13 @@ export default function FunctionAplikasiPage() {
             setEditTarget(null);
           }}
         >
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editTarget ? "Edit Mapping Function Aplikasi" : "Tambah Mapping Function Aplikasi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="func-app-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
+              <h2 id="func-app-modal-title" className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
               <button
-                className={styles.btn}
+                className={styles.modalClose}
                 type="button"
+                aria-label="Close"
                 onClick={() => {
                   if (submitting) return;
                   setShowModal(false);
@@ -427,28 +537,37 @@ export default function FunctionAplikasiPage() {
                   setEditTarget(null);
                 }}
               >
-                Close
+                ✕
               </button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Function</label>
+                <label id="func-app-modal-label-function" className={styles.label} htmlFor="func-app-modal-function">Function</label>
                 <Dropdown
+                  id="func-app-modal-function"
                   className={styles.input}
                   options={functions.map((item) => ({ value: item.FunctionId, label: item.Name }))}
                   value={selectedFunctionId}
                   onChange={setSelectedFunctionId}
                   placeholder="Pilih Function"
                   disabled={Boolean(editTarget)}
+                  aria-labelledby="func-app-modal-label-function"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Applications</label>
-                <div className={styles.checkboxGrid}>
+                <span id="func-app-modal-label-apps" className={styles.label}>Applications</span>
+                <div className={styles.checkboxGrid} role="group" aria-labelledby="func-app-modal-label-apps">
                   {applications.length === 0 ? <div className={styles.meta}>Tidak ada aplikasi aktif</div> : null}
                   {applications.map((app) => (
                     <label key={app.ApplicationId} className={styles.checkboxItem}>
-                      <input type="checkbox" checked={selectedAppIds.includes(app.ApplicationId)} onChange={() => toggleAppSelection(app.ApplicationId)} />
+                      <input
+                        id={`functionAppSelect-${app.ApplicationId}`}
+                        name="selectedAppIds"
+                        type="checkbox"
+                        value={String(app.ApplicationId)}
+                        checked={selectedAppIds.includes(app.ApplicationId)}
+                        onChange={() => toggleAppSelection(app.ApplicationId)}
+                      />
                       <span>{app.Name}</span>
                     </label>
                   ))}

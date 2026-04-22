@@ -10,8 +10,10 @@ import { Dropdown } from "@/components/common/dropdown";
 import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import {
   createApplicationMaster,
+  downloadApplicationTemplate,
   fetchApplicationsMaster,
   updateApplicationMaster,
+  uploadApplicationFile,
   type ApplicationMaster,
 } from "@/lib/master-data";
 import styles from "../page-mockup.module.css";
@@ -22,9 +24,8 @@ type FilterStatus = "all" | "active" | "inactive";
 function matchesSearch(item: ApplicationMaster, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterAplikasiPage() {
@@ -32,7 +33,7 @@ export default function MasterAplikasiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
-  const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [searchBy, setSearchBy] = useState("all");
@@ -42,7 +43,6 @@ export default function MasterAplikasiPage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ApplicationMaster | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState("Active");
@@ -100,7 +100,6 @@ export default function MasterAplikasiPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setCode("");
     setName("");
     setDescription("");
     setActive("Active");
@@ -109,7 +108,6 @@ export default function MasterAplikasiPage() {
 
   const openEdit = (row: ApplicationMaster) => {
     setEditing(row);
-    setCode(row.Code || "");
     setName(row.Name || "");
     setDescription(row.Description || "");
     setActive(row.IsActive ? "Active" : "Inactive");
@@ -123,15 +121,14 @@ export default function MasterAplikasiPage() {
   };
 
   const onSubmit = async () => {
-    if (!code.trim() || !name.trim()) {
-      showFeedback("App Code dan App Name wajib diisi.", "Validasi");
+    if (!name.trim()) {
+      showFeedback("App Name wajib diisi.", "Validasi");
       return;
     }
 
     setSubmitting(true);
     if (!editing) {
       const result = await createApplicationMaster({
-        code: code.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
       });
@@ -146,7 +143,6 @@ export default function MasterAplikasiPage() {
     }
 
     const result = await updateApplicationMaster(editing.ApplicationId, {
-      code: code.trim(),
       name: name.trim(),
       description: description.trim(),
       isActive: active === "Active",
@@ -190,19 +186,61 @@ export default function MasterAplikasiPage() {
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     setUploadFileName(file?.name || "No file chosen");
-    setUploadInfo("");
   };
 
   const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Master Aplikasi belum tersedia.");
+    void (async () => {
+      const result = await downloadApplicationTemplate();
+      if (!result.success || !result.blob) {
+        showFeedback(result.message || "Gagal download template", "Gagal Download");
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename || "master-aplikasi-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    })();
   };
 
   const onUploadMaster = () => {
-    if (uploadFileName === "No file chosen") {
-      setUploadInfo("Pilih file terlebih dahulu.");
-      return;
-    }
-    setUploadInfo("Upload bulk Master Aplikasi belum tersedia.");
+    void (async () => {
+      const fileInput = document.getElementById("master-aplikasi-file") as HTMLInputElement | null;
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showFeedback("Pilih file Excel terlebih dahulu.", "Validasi");
+        return;
+      }
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+        showFeedback("Format file harus Excel (.xlsx atau .xls).", "Validasi");
+        return;
+      }
+      setUploadLoading(true);
+      const result = await uploadApplicationFile(file);
+      setUploadLoading(false);
+      if (!result.success) {
+        showFeedback(result.message || "Gagal upload file", "Gagal Upload");
+        return;
+      }
+      let message = `Upload berhasil! Imported: ${result.imported ?? 0}, Updated: ${result.updated ?? 0}, Gagal: ${result.failed ?? 0}`;
+      if (result.errors && result.errors.length > 0) {
+        message += "\n\nErrors:\n";
+        result.errors.slice(0, 5).forEach((err) => {
+          message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
+        });
+        if (result.errors.length > 5) {
+          message += `... dan ${result.errors.length - 5} error lainnya`;
+        }
+      }
+      showFeedback(message, "Upload Selesai");
+      setUploadFileName("No file chosen");
+      if (fileInput) fileInput.value = "";
+      await loadData();
+    })();
   };
 
   return (
@@ -222,28 +260,27 @@ export default function MasterAplikasiPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label id="mapp-status-label" className={styles.filterLabel} htmlFor="mapp-status-dropdown">Status</label>
+              <Dropdown
+                id="mapp-status-dropdown"
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-labelledby="mapp-status-label"
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -270,11 +307,11 @@ export default function MasterAplikasiPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>App Code</th>
-                    <th>App Name</th>
-                    <th>Description</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">App Name</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -283,9 +320,9 @@ export default function MasterAplikasiPage() {
                       <td colSpan={5}>Tidak ada data aplikasi</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.ApplicationId}>
-                        <td>{item.Code}</td>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.Name}</td>
                         <td>{item.Description || "-"}</td>
                         <td>
@@ -331,7 +368,7 @@ export default function MasterAplikasiPage() {
           <span className={styles.meta}>Unggah data master aplikasi dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-aplikasi-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -349,40 +386,36 @@ export default function MasterAplikasiPage() {
             <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster}>
-              Upload
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster} disabled={uploadLoading}>
+              {uploadLoading ? "Uploading..." : "Upload"}
             </button>
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom minimal: App Code, App Name, Description, Status.
+          Format file: Excel (.xlsx/.xls). Kolom: App Name, Description, Status. Download template untuk format yang benar.
         </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit Aplikasi" : "Add Aplikasi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-aplikasi-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit Aplikasi" : "Add Aplikasi"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-aplikasi-modal-title" className={styles.modalTitle}>{editing ? "Edit Aplikasi" : "Add Aplikasi"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>App Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. B2B" />
+                <label className={styles.label} htmlFor="master-app-name-input">App Name</label>
+                <input id="master-app-name-input" name="appName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. B2B Ordering" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>App Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. B2B Ordering" />
+                <label className={styles.label} htmlFor="master-app-desc-input">Description</label>
+                <textarea id="master-app-desc-input" name="appDescription" className={styles.textarea} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Deskripsi aplikasi" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Description</label>
-                <textarea className={styles.textarea} rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Deskripsi aplikasi" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mapp-modal-status-label" className={styles.label} htmlFor="mapp-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mapp-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -390,6 +423,7 @@ export default function MasterAplikasiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-labelledby="mapp-modal-status-label"
                 />
               </div>
             </div>

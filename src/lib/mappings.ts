@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -15,6 +15,8 @@ export type FunctionApplicationMappingItem = {
   functionId: string;
   functionCode: string;
   functionName: string;
+  itLeadUserId?: string | null;
+  itLeadName?: string | null;
   applications: Array<{
     mappingId: string;
     applicationId: string;
@@ -74,6 +76,11 @@ async function fetchMappedApplications(
       | { success?: boolean; applications?: MappedApplicationOption[]; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, applications: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || payload?.success !== true) {
       return {
         success: false,
@@ -124,6 +131,11 @@ async function authJson<T>(
     });
 
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok) {
       return { success: false, message: getErrorMessage(payload, fallbackMessage) };
     }
@@ -245,6 +257,95 @@ export async function exportDepartmentApplicationMappingsCsv(): Promise<{ succes
       return { success: false, message: "Gagal export mapping dept-aplikasi" };
     }
     return { success: true, blob: await response.blob() };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export type BulkImportResult = {
+  success: boolean;
+  imported?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+  errors?: Array<{ row: number; data: Record<string, unknown>; errors: string[] }>;
+  message?: string;
+};
+
+export async function downloadMappingTemplate(
+  mappingType: "function-application" | "application-department",
+): Promise<{ success: boolean; blob?: Blob; message?: string }> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  const endpoint =
+    mappingType === "function-application"
+      ? "/mappings/function-app/template"
+      : "/mappings/app-dept/template";
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}${endpoint}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return { success: false, message: "Gagal mengunduh template" };
+    }
+    return { success: true, blob: await response.blob() };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function bulkImportMappings(
+  file: File,
+  mappingType: "function-application" | "application-department",
+): Promise<BulkImportResult> {
+  const token = getAccessToken();
+  if (!token) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mappingType", mappingType);
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/mappings/bulk-import`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      cache: "no-store",
+    });
+
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
+
+    if (!response.ok) {
+      const errors = Array.isArray(payload?.errors)
+        ? (payload.errors as Array<{ row: number; data: Record<string, unknown>; errors: string[] }>)
+        : undefined;
+      return {
+        success: false,
+        message: typeof payload?.message === "string" ? payload.message : "Gagal mengimpor data",
+        errors,
+      };
+    }
+
+    return {
+      success: true,
+      imported: typeof payload?.imported === "number" ? payload.imported : 0,
+      updated: typeof payload?.updated === "number" ? payload.updated : 0,
+      skipped: typeof payload?.skipped === "number" ? payload.skipped : 0,
+      failed: typeof payload?.failed === "number" ? payload.failed : 0,
+      errors: Array.isArray(payload?.errors)
+        ? (payload.errors as Array<{ row: number; data: Record<string, unknown>; errors: string[] }>)
+        : [],
+    };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -17,6 +17,7 @@ export type ApprovalRespondent = {
   DepartmentId: string;
   DepartmentName: string;
   SubmittedAt: string;
+  ResponseApprovalStatus?: string;
   DuplicateCount: number;
   IsDuplicate: boolean;
 };
@@ -60,6 +61,7 @@ export type PendingApproval = {
   FunctionId?: string | null;
   FunctionName?: string | null;
   ProposedByName?: string | null;
+  SubmittedAt?: string | null;
 };
 
 export type ApprovalComment = {
@@ -131,6 +133,11 @@ async function getJson<T>(endpoint: string, fallbackMessage: string): Promise<Ap
       cache: "no-store",
     });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: extractError(payload, fallbackMessage) };
     }
@@ -156,6 +163,11 @@ async function mutateJson(
       body: JSON.stringify(body),
     });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return { success: false, message: extractError(payload, fallbackMessage) };
     }
@@ -193,6 +205,20 @@ export async function fetchApprovalRespondents(input: {
   );
   if (!result.success) return result;
   return { success: true, data: result.data.respondents || [] };
+}
+
+export async function approveInitialResponses(input: {
+  responseIds: string[];
+  reason?: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/approve", "POST", input, "Gagal approve response awal");
+}
+
+export async function rejectInitialResponses(input: {
+  responseIds: string[];
+  reason: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/reject", "POST", input, "Gagal reject response awal");
 }
 
 export async function fetchProposedTakeouts(input: {
@@ -315,6 +341,21 @@ export async function rejectTakeout(input: {
   reason: string;
 }): Promise<ApiResult<Record<string, unknown>>> {
   return mutateJson("/approvals/reject", "POST", input, "Gagal reject takeout");
+}
+
+export async function proposeTakeout(input: {
+  responseId: string;
+  questionId: string;
+  reason: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/propose-takeout", "POST", input, "Gagal propose takeout");
+}
+
+export async function approveFinalResponses(input: {
+  responseIds: string[];
+  reason?: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  return mutateJson("/approvals/respondents/final-approve", "POST", input, "Gagal approve final response");
 }
 
 export async function submitBestCommentFeedback(input: {

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CSI Portal Frontend",
+  title: "CSI Portal",
   description: "Next.js frontend for CSI Portal",
 };
 

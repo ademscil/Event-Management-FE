@@ -15,9 +15,10 @@ function initials(name: string): string {
 
 interface AdminHeaderProps {
   user: AuthUser;
+  onMenuToggle?: () => void;
 }
 
-export default function AdminHeader({ user }: AdminHeaderProps) {
+export default function AdminHeader({ user, onMenuToggle }: AdminHeaderProps) {
   const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
@@ -41,12 +42,22 @@ export default function AdminHeader({ user }: AdminHeaderProps) {
 
   return (
     <header className={styles.header}>
-      <div>
-        <Link className={styles.logoLink} href="/admin/dashboard">
-          <Image className={styles.logo} src="/assets/img/logo.png" alt="Logo" width={28} height={28} priority />
-          <span>AOP Event Management</span>
-        </Link>
-      </div>
+      <button
+        type="button"
+        className={styles.hamburger}
+        onClick={onMenuToggle}
+        aria-label="Toggle menu"
+      >
+        <span className={styles.hamburgerIcon}>
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+      <Link className={styles.logoLink} href="/admin/dashboard">
+        <Image className={styles.logo} src="/assets/img/logo.png" alt="Logo" width={28} height={28} priority />
+        <span>AOP Event Management</span>
+      </Link>
       <div ref={userMenuRef} className={styles.userWrap}>
         <button
           type="button"

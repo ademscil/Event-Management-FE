@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useMemo, useRef } from "react";
+import React from "react";
 import type { BusinessUnitOption, DepartmentOption, DivisionOption } from "@/lib/org-hierarchy";
 import type { FunctionMaster } from "@/lib/master-data";
 import styles from "@/app/(admin)/admin/event-management/survey-create/survey-create.module.css";
@@ -28,6 +29,8 @@ export interface PreviewElement {
   displayCondition?: "always" | "after_mapped_selection";
   conditionalRequiredSourceId?: string;
   conditionalRequiredThreshold?: number;
+  /** Jika false, textbox komentar per statement tidak ditampilkan */
+  likertEnableComment?: boolean;
 }
 
 function SignaturePad({ value, onChange }: { value?: string; onChange: (value: string) => void }) {
@@ -374,23 +377,41 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
             }
 
             const selectedBu = orgData.businessUnits.find((item) => sameId(item.BusinessUnitId, value));
-            if ((selectedBu?.Name || "").trim().toLowerCase() !== "corporate ho") {
+            const buName = (selectedBu?.Name || "").trim().toLowerCase();
+            const isCorporateHo = buName === "corporate ho";
+
+            if (!isCorporateHo) {
               const divisionsInBu = orgData.divisions.filter((item) => sameId(item.BusinessUnitId, value));
-              const autoDivision = divisionsInBu.find(
-                (item) => item.Name.trim().toLowerCase() === (selectedBu?.Name || "").trim().toLowerCase(),
-              ) || divisionsInBu[0];
+
+              if (divisionsInBu.length === 0) {
+                // BU belum punya divisi — reset agar user bisa pilih manual
+                onSetValuesBulk({
+                  [divisionElement.id]: "",
+                  [departmentElement.id]: "",
+                });
+                return;
+              }
+
+              // Cari divisi yang namanya sama dengan BU (untuk BU yang punya divisi tunggal dengan nama sama)
+              const autoDivision =
+                divisionsInBu.find((item) => item.Name.trim().toLowerCase() === buName) ||
+                divisionsInBu[0];
+
               const departmentsInDivision = autoDivision
                 ? orgData.departments.filter((item) => item.DivisionId === autoDivision.DivisionId)
                 : [];
-              const autoDepartment = departmentsInDivision.find(
-                (item) => item.Name.trim().toLowerCase() === (selectedBu?.Name || "").trim().toLowerCase(),
-              ) || departmentsInDivision[0];
+
+              // Cari department yang namanya sama dengan BU, atau ambil yang pertama
+              const autoDepartment =
+                departmentsInDivision.find((item) => item.Name.trim().toLowerCase() === buName) ||
+                departmentsInDivision[0];
 
               onSetValuesBulk({
                 [divisionElement.id]: autoDivision?.DivisionId || "",
                 [departmentElement.id]: autoDepartment?.DepartmentId || "",
               });
             } else {
+              // Corporate HO — biarkan user pilih divisi dan department manual
               onSetValuesBulk({
                 [divisionElement.id]: "",
                 [departmentElement.id]: "",
@@ -420,8 +441,8 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "rating") {
-    const parsedScale = Number(element.options?.[0] || 10);
-    const max = Number.isFinite(parsedScale) ? Math.min(10, Math.max(3, Math.round(parsedScale))) : 10;
+    const parsedScale = Number(element.options[0]);
+    const max = Number.isFinite(parsedScale) && parsedScale >= 1 ? Math.min(10, Math.max(1, Math.round(parsedScale))) : 10;
     const current = Number(values[element.id] || 0);
     return (
       <div className={styles.previewRatingRow}>
@@ -433,22 +454,88 @@ export default function SurveyPreviewElement({ element, allElements, values, onS
   }
 
   if (element.type === "likert") {
-    const cols = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-    const rows = element.options.length > 0 ? element.options : ["Statement 1", "Statement 2"];
+    const rawOptions = element.options;
+    const lastItem = rawOptions[rawOptions.length - 1];
+    const lastAsNum = Number(lastItem);
+    const hasScaleAtEnd = rawOptions.length > 0 && Number.isFinite(lastAsNum) && lastAsNum >= 1 && lastAsNum <= 10 && String(Math.round(lastAsNum)) === String(lastItem);
+    const scale = hasScaleAtEnd ? Math.round(lastAsNum) : 10;
+    const rows = hasScaleAtEnd ? rawOptions.slice(0, -1) : rawOptions;
+    const effectiveRows = rows.length > 0 ? rows : ["Statement 1", "Statement 2"];
+    const cols = Array.from({ length: scale }, (_, idx) => String(idx + 1));
+
+    // Threshold untuk komentar wajib — baca dari element.conditionalRequiredThreshold atau default 7
+    const commentThreshold = Math.max(1, Math.round(Number(element.conditionalRequiredThreshold || 7)));
+    // Apakah komentar per statement diaktifkan (default true)
+    const enableComment = element.likertEnableComment !== false;
+
     return (
       <div className={styles.previewMatrixWrap}>
         <table className={styles.previewMatrixTable}>
-          <thead><tr><th>Statement</th>{cols.map((c) => <th key={`${element.id}-c-${c}`}>{c}</th>)}</tr></thead>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", minWidth: 180 }}>Statement</th>
+              {cols.map((c) => <th key={`${element.id}-c-${c}`}>{c}</th>)}
+            </tr>
+          </thead>
           <tbody>
-            {rows.map((row, rowIdx) => (
-              <tr key={`${element.id}-r-${rowIdx}`}>
-                <td>{row}</td>
-                {cols.map((col) => {
-                  const key = `${element.id}-${rowIdx}`;
-                  return <td key={`${element.id}-${rowIdx}-${col}`}><input type="radio" name={key} checked={values[key] === col} onChange={() => onSetValue(key, col)} /></td>;
-                })}
-              </tr>
-            ))}
+            {effectiveRows.map((row, rowIdx) => {
+              const rowKey = `${element.id}-${rowIdx}`;
+              const commentKey = `${element.id}-comment-${rowIdx}`;
+              const selectedVal = Number(values[rowKey] || 0);
+              const hasScore = selectedVal > 0;
+              const commentRequired = hasScore && selectedVal < commentThreshold;
+
+              return (
+                <React.Fragment key={`${element.id}-frag-${rowIdx}`}>
+                  <tr>
+                    <td style={{ fontWeight: 600, fontSize: 13, color: "#0f172a" }}>{row}</td>
+                    {cols.map((col) => (
+                      <td key={`${element.id}-${rowIdx}-${col}`}>
+                        <input
+                          type="radio"
+                          name={rowKey}
+                          checked={values[rowKey] === col}
+                          onChange={() => onSetValue(rowKey, col)}
+                          style={{ accentColor: "#2563eb" }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Textbox komentar per row — hanya jika enableComment aktif dan nilai sudah dipilih */}
+                  {enableComment && hasScore ? (
+                    <tr>
+                      <td colSpan={cols.length + 1} style={{ paddingTop: 6, paddingBottom: 10 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 12, color: "#64748b" }}>Alasan / Komentar</span>
+                            {commentRequired ? (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#dc2626", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 999, padding: "1px 8px" }}>
+                                Wajib (nilai &lt; {commentThreshold})
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 11, color: "#94a3b8", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 999, padding: "1px 8px" }}>
+                                Opsional
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            className={styles.previewInput}
+                            type="text"
+                            placeholder={commentRequired ? "Wajib diisi — jelaskan kendala atau saran perbaikan" : "Tambahkan komentar (opsional)"}
+                            value={String(values[commentKey] || "")}
+                            onChange={(e) => onSetValue(commentKey, e.target.value)}
+                            style={{
+                              borderColor: commentRequired && !values[commentKey] ? "#fca5a5" : undefined,
+                              background: commentRequired && !values[commentKey] ? "#fff5f5" : undefined,
+                            }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

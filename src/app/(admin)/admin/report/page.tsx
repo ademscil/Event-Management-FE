@@ -1,8 +1,10 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import { fetchFunctionsMaster } from "@/lib/master-data";
+import { getEventStatusLabel } from "@/lib/event-status";
 import {
   exportSurveyReport,
   fetchReportSelectionList,
@@ -12,10 +14,17 @@ import {
   type TakeoutComparisonRow,
 } from "@/lib/reports";
 import type { UserRole } from "@/types/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import baseStyles from "../page-mockup.module.css";
 import styles from "./report.module.css";
+import {
+  formatDate,
+  formatNumber,
+  mapSelectionStatus,
+  normalizeRole,
+  toScore,
+} from "./report-utils";
 
 type TakeoutTableRow = {
   surveyId: string;
@@ -37,41 +46,6 @@ type ModalState =
   | { type: "comment-detail"; row: TakeoutTableRow }
   | { type: "export"; survey: ReportSelectionItem; format: "excel" | "pdf" };
 
-function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "-";
-  return new Intl.NumberFormat("id-ID").format(value);
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-function toScore(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return "-";
-  return value.toFixed(2);
-}
-
-function mapSelectionStatus(item: ReportSelectionItem): "generated" | "active" | "draft" | "closed" | "archived" | "other" {
-  if (item.hasGeneratedReport) return "generated";
-  const normalized = String(item.status || "").toLowerCase();
-  if (normalized === "generated") return "generated";
-  if (normalized === "active") return "active";
-  if (normalized === "draft") return "draft";
-  if (normalized === "closed") return "closed";
-  if (normalized === "archived") return "archived";
-  return "other";
-}
-
-function normalizeRole(input: string | null | undefined): string {
-  return String(input || "").toLowerCase().replace(/[\s_-]/g, "");
-}
-
 export default function ReportSelectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -92,7 +66,10 @@ export default function ReportSelectionPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  const [searchBy, setSearchBy] = useState<string>("all");
   const [surveySearch, setSurveySearch] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState<string>("all");
+  const [appliedSurveySearch, setAppliedSurveySearch] = useState("");
   const [eventStatusFilter, setEventStatusFilter] = useState<string>("all");
   const [selectedTakeoutSurvey, setSelectedTakeoutSurvey] = useState<string>(preselectedSurveyId || "all");
   const [selectedFunctionId, setSelectedFunctionId] = useState<string>("all");
@@ -103,27 +80,36 @@ export default function ReportSelectionPage() {
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [exporting, setExporting] = useState(false);
 
+  const loadSurveyList = async (): Promise<ReportSelectionItem[]> => {
+    const listResult = await fetchReportSelectionList();
+    if (!listResult.success) {
+      setError(listResult.message || "Gagal memuat daftar event report");
+      setSurveys([]);
+      return [];
+    }
+
+    setError("");
+    setSurveys(listResult.surveys);
+    return listResult.surveys;
+  };
+
   useEffect(() => {
     const run = async () => {
       try {
-        const [listResult, functionResult] = await Promise.all([
-          fetchReportSelectionList(),
-          fetchFunctionsMaster(),
-        ]);
+        const shouldLoadFunctionOptions = isSuperAdmin || isAdminEvent;
+        const requests: [Promise<ReportSelectionItem[]>, Promise<Awaited<ReturnType<typeof fetchFunctionsMaster>> | null>] = [
+          loadSurveyList(),
+          shouldLoadFunctionOptions ? fetchFunctionsMaster() : Promise.resolve(null),
+        ];
+        const [, functionResult] = await Promise.all(requests);
 
-        if (!listResult.success) {
-          setError(listResult.message || "Gagal memuat daftar event report");
-          setSurveys([]);
-        } else {
-          setError("");
-          setSurveys(listResult.surveys);
-        }
-
-        if (functionResult.success) {
+        if (functionResult?.success) {
           const dynamic = functionResult.data
             .filter((item) => item.IsActive !== false)
             .map((item) => ({ value: item.FunctionId, label: item.Name }));
           setFunctionOptions([{ value: "all", label: "All Functions" }, ...dynamic]);
+        } else {
+          setFunctionOptions([{ value: "all", label: "All Functions" }]);
         }
       } catch {
         setError("Terjadi kesalahan saat memuat data report.");
@@ -133,10 +119,10 @@ export default function ReportSelectionPage() {
       }
     };
     void run();
-  }, []);
+  }, [isAdminEvent, isSuperAdmin]);
 
   const filteredSurveyRows = useMemo(() => {
-    const term = surveySearch.trim().toLowerCase();
+    const term = appliedSurveySearch.trim().toLowerCase();
     return surveys.filter((item) => {
       if (eventStatusFilter !== "all") {
         const normalizedStatus = mapSelectionStatus(item);
@@ -145,14 +131,30 @@ export default function ReportSelectionPage() {
       if (!term) return true;
       const name = String(item.title || "").toLowerCase();
       const period = String(item.period || "").toLowerCase();
-      return name.includes(term) || period.includes(term);
+      const respondent = String(item.respondentCount || "").toLowerCase();
+
+      if (appliedSearchBy === "event") return name.includes(term);
+      if (appliedSearchBy === "period") return period.includes(term);
+      if (appliedSearchBy === "respondent") return respondent.includes(term);
+      return name.includes(term) || period.includes(term) || respondent.includes(term);
     });
-  }, [eventStatusFilter, surveySearch, surveys]);
+  }, [appliedSearchBy, appliedSurveySearch, eventStatusFilter, surveys]);
 
   const lastUpdatedText = useMemo(() => {
-    if (surveys.length === 0) return "-";
-    return formatDate(new Date().toISOString());
-  }, [surveys.length]);
+    const generatedDates = surveys
+      .map((item) => item.generatedAt)
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => new Date(value))
+      .filter((value) => !Number.isNaN(value.getTime()));
+
+    if (generatedDates.length === 0) return "-";
+
+    const latest = generatedDates.reduce((previous, current) =>
+      current.getTime() > previous.getTime() ? current : previous
+    );
+
+    return formatDate(latest.toISOString());
+  }, [surveys]);
 
   const selectedFunctionLabel = useMemo(
     () => functionOptions.find((item) => item.value === selectedFunctionId)?.label || "-",
@@ -165,7 +167,7 @@ export default function ReportSelectionPage() {
   const exportFormatOptions = useMemo(
     () => [
       { value: "excel", label: "Excel (.xlsx)" },
-      { value: "pdf", label: "PDF (.pdf)" },
+      { value: "pdf", label: "PDF (Print View)" },
     ],
     []
   );
@@ -182,10 +184,25 @@ export default function ReportSelectionPage() {
     []
   );
 
-  const loadTakeoutRows = async () => {
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedSurveySearch(surveySearch);
+  };
+  const searchByOptions = useMemo(
+    () => [
+      { value: "all", label: "Search By" },
+      { value: "event", label: "Nama Event" },
+      { value: "period", label: "Periode" },
+      { value: "respondent", label: "Responden" },
+    ],
+    []
+  );
+
+  const loadTakeoutRows = useCallback(async () => {
     setTakeoutLoading(true);
     setError("");
     setMessage("");
+    setTakeoutRows([]);
 
     const surveyTargets = selectedTakeoutSurvey === "all"
       ? surveys
@@ -205,7 +222,6 @@ export default function ReportSelectionPage() {
         const result = await fetchTakeoutComparison({ surveyId: survey.surveyId, functionId });
         if (!result.success) {
           setError(result.message || "Gagal memuat comparison takeout");
-          setTakeoutLoading(false);
           return;
         }
 
@@ -228,20 +244,19 @@ export default function ReportSelectionPage() {
     } catch {
       setError("Terjadi kesalahan saat memuat data comparison takeout.");
       setTakeoutRows([]);
-      setTakeoutLoading(false);
       return;
+    } finally {
+      setTakeoutLoading(false);
     }
 
     setTakeoutRows(allRows);
-    setTakeoutLoading(false);
-  };
+  }, [selectedFunctionId, selectedFunctionLabel, selectedTakeoutSurvey, surveys]);
 
   useEffect(() => {
     if (!loading) {
       void loadTakeoutRows();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, selectedTakeoutSurvey, selectedFunctionId, surveys.length]);
+  }, [loadTakeoutRows, loading]);
 
   const takeoutStats = useMemo(() => {
     const total = takeoutRows.length;
@@ -263,18 +278,30 @@ export default function ReportSelectionPage() {
       setError(result.message || "Gagal generate report");
       return;
     }
-
-    setSurveys((prev) =>
-      prev.map((item) =>
-        item.surveyId === survey.surveyId
-          ? { ...item, hasGeneratedReport: true, generatedAt: new Date().toISOString() }
-          : item
-      )
-    );
+    const refreshed = await loadSurveyList();
+    let updated = refreshed.find((item) => item.surveyId === survey.surveyId);
+    if (!updated?.hasGeneratedReport) {
+      // Retry once after 1.5s — BE may need a moment to persist the flag
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const retried = await loadSurveyList();
+      updated = retried.find((item) => item.surveyId === survey.surveyId);
+    }
+    if (!updated?.hasGeneratedReport) {
+      setError("Generate report belum tersimpan penuh di backend. Coba refresh atau regenerate sekali lagi setelah backend aktif terbaru.");
+      return;
+    }
     setMessage(`Report untuk "${survey.title}" berhasil di-generate.`);
   };
 
   const runExportReport = async (survey: ReportSelectionItem, format: "excel" | "pdf") => {
+    if (format === "pdf") {
+      const url = `/admin/report/${encodeURIComponent(survey.surveyId)}?print=pdf&autoprint=1`;
+      window.open(url, "_blank", "noopener,noreferrer");
+      setModal({ type: "none" });
+      setMessage("Mode export PDF dibuka. Simpan hasil print sebagai PDF dari browser.");
+      return;
+    }
+
     setExporting(true);
     setError("");
     const result = await exportSurveyReport({
@@ -328,21 +355,32 @@ export default function ReportSelectionPage() {
           <h2 className={baseStyles.panelTitle}>Daftar Event</h2>
           <span className={baseStyles.meta}>Terakhir diperbarui: {lastUpdatedText}</span>
         </div>
-        <div className={styles.searchInlineRow}>
-          <label className={styles.searchInlineLabel} htmlFor="surveySearch">CARI EVENT</label>
-          <span className={styles.searchInlineColon}>:</span>
-          <input
-            id="surveySearch"
-            className={`${baseStyles.input} ${styles.searchInlineInput} ${styles.searchControl}`}
-            placeholder="Nama event atau periode"
-            value={surveySearch}
-            onChange={(event) => setSurveySearch(event.target.value)}
-          />
-          <Dropdown
-            className={`${styles.searchInlineStatus} ${styles.searchControl}`}
-            options={eventStatusOptions}
-            value={eventStatusFilter}
-            onChange={setEventStatusFilter}
+        <div className={baseStyles.filterToolbar}>
+          <div className={`${baseStyles.filterGroup} ${baseStyles.filterGroupMd}`}>
+            <label id="rpt-status-label" className={baseStyles.filterLabel} htmlFor="rpt-status-dropdown">Status</label>
+            <Dropdown
+              id="rpt-status-dropdown"
+              className={baseStyles.filterControl}
+              fullWidth
+              options={eventStatusOptions}
+              value={eventStatusFilter}
+              onChange={setEventStatusFilter}
+              aria-labelledby="rpt-status-label"
+            />
+          </div>
+          <SearchBar
+            options={searchByOptions}
+            selectedValue={searchBy}
+            keyword={surveySearch}
+            onSelectedValueChange={setSearchBy}
+            onKeywordChange={setSurveySearch}
+            onButtonClick={onApplySearch}
+            placeholder={
+              searchBy === "event" ? "Cari nama event..." :
+              searchBy === "period" ? "Cari periode..." :
+              searchBy === "respondent" ? "Cari responden..." :
+              "Cari event..."
+            }
           />
         </div>
 
@@ -381,7 +419,7 @@ export default function ReportSelectionPage() {
                         {isGenerated ? (
                           <span className={`${baseStyles.badge} ${styles.badgeGenerated}`}>Generated</span>
                         ) : (
-                          <span className={styles.statusText}>{item.status}</span>
+                          <span className={styles.statusText}>{getEventStatusLabel(item.status)}</span>
                         )}
                       </td>
                       <td className={styles.colRespondent}>{formatNumber(item.respondentCount)}</td>
@@ -391,7 +429,7 @@ export default function ReportSelectionPage() {
                             <button
                               type="button"
                               className={styles.buttonSecondaryXs}
-                              disabled={!hasResponses}
+                              disabled={!isGenerated}
                               onClick={() => openReportView(item)}
                             >
                               View Report
@@ -430,7 +468,7 @@ export default function ReportSelectionPage() {
                               <button
                                 type="button"
                                 className={styles.buttonGhostXs}
-                                disabled={!hasResponses}
+                                disabled={!isGenerated}
                                 onClick={() => setModal({ type: "export", survey: item, format: "excel" })}
                               >
                                 Export
@@ -438,7 +476,8 @@ export default function ReportSelectionPage() {
                             </>
                           )}
                         </div>
-                        {!hasResponses ? <span className={styles.actionHint}>Belum ada response</span> : null}
+                        {!hasResponses ? <span className={styles.actionHint}>Belum ada response final approved</span> : null}
+                        {hasResponses && !isGenerated ? <span className={styles.actionHint}>Generate report terlebih dahulu</span> : null}
                       </td>
                     </tr>
                   );
@@ -456,23 +495,27 @@ export default function ReportSelectionPage() {
         </div>
         <div className={`${baseStyles.filterGrid} ${styles.comparisonFilterGrid}`}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Survey</label>
+            <label id="rpt-survey-label" className={baseStyles.label} htmlFor="rpt-survey-dropdown">Survey</label>
             <Dropdown
+              id="rpt-survey-dropdown"
               className={baseStyles.select}
               fullWidth
               options={surveyFilterOptions}
               value={selectedTakeoutSurvey}
               onChange={setSelectedTakeoutSurvey}
+              aria-labelledby="rpt-survey-label"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label}>Function</label>
+            <label id="rpt-function-label" className={baseStyles.label} htmlFor="rpt-function-dropdown">Function</label>
             <Dropdown
+              id="rpt-function-dropdown"
               className={baseStyles.select}
               fullWidth
               options={functionOptions}
               value={selectedFunctionId}
               onChange={setSelectedFunctionId}
+              aria-labelledby="rpt-function-label"
             />
           </div>
         </div>
@@ -555,12 +598,12 @@ export default function ReportSelectionPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="report-modal-title" onClick={(event) => event.stopPropagation()}>
             {modal.type === "confirm-generate" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Generate Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">×</button>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Generate Report</h3>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal generate report">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Generate report untuk &quot;{modal.survey.title}&quot; sekarang?</p>
@@ -575,8 +618,8 @@ export default function ReportSelectionPage() {
             {modal.type === "comment-detail" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">×</button>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Comment Detail {modal.row.questionCode}</h3>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}><strong>Pertanyaan:</strong> {modal.row.questionText}</p>
@@ -591,8 +634,8 @@ export default function ReportSelectionPage() {
             {modal.type === "export" ? (
               <>
                 <header className={styles.modalHeader}>
-                  <h3 className={styles.modalTitle}>Export Report</h3>
-                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">×</button>
+                  <h3 id="report-modal-title" className={styles.modalTitle}>Export Report</h3>
+                  <button type="button" className={styles.modalClose} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal export report">✕</button>
                 </header>
                 <div className={styles.modalBody}>
                   <p className={styles.modalText}>Survey: {modal.survey.title}</p>
@@ -604,6 +647,11 @@ export default function ReportSelectionPage() {
                     value={modal.format}
                     onChange={(value) => setModal({ ...modal, format: value as "excel" | "pdf" })}
                   />
+                  <p className={styles.modalHint}>
+                    {modal.format === "pdf"
+                      ? "PDF dibuka dari tampilan report yang sama, lalu disimpan melalui browser print."
+                      : "Excel berisi sheet ringkasan report dan detail data respon."}
+                  </p>
                 </div>
                 <footer className={styles.modalActions}>
                   <button type="button" className={styles.buttonSecondaryXs} onClick={() => setModal({ type: "none" })}>Cancel</button>

@@ -8,19 +8,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { Dropdown } from "@/components/common/dropdown";
 import styles from "./operations.module.css";
-
-interface ScheduledOperation {
-  operationId: string;
-  operationType: string;
-  frequency: string;
-  scheduledDate?: string | null;
-  scheduledTime?: string | null;
-  dayOfWeek?: number | null;
-  status: string;
-}
+import CancelScheduledOperationDialog from "./cancel-scheduled-operation-dialog";
+import {
+  formatOperationDate,
+  getStatusBadge,
+  parseRecipients,
+  toDownloadFileStem,
+  validateScheduleInput,
+  type DayOfWeekValue,
+  type ScheduledOperation,
+} from "./operations-utils";
 
 type ShareTab = "invite" | "qr" | "embed";
-type DayOfWeekValue = "0" | "1" | "2" | "3" | "4" | "5" | "6";
 
 const frequencyOptions: { label: string; value: ScheduleFrequency }[] = [
   { label: "Once", value: "once" },
@@ -77,56 +76,7 @@ export default function OperationsPage() {
   const [reminderLoading, setReminderLoading] = useState(false);
   const [openInfoPanel, setOpenInfoPanel] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ScheduledOperation | null>(null);
-
-  const parseRecipients = (value: string): string[] => (
-    value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  );
-
-  const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
-  const validateScheduleInput = (input: {
-    date: string;
-    time: string;
-    frequency: ScheduleFrequency;
-    subject: string;
-    messageText: string;
-    recipients: string[];
-    dayOfWeek?: DayOfWeekValue;
-  }): string | null => {
-    if (!input.date || !input.time || !input.subject.trim() || !input.messageText.trim()) {
-      return "Tanggal, waktu, subject, dan message wajib diisi";
-    }
-
-    if (input.frequency === "weekly" && (input.dayOfWeek === undefined || input.dayOfWeek === null)) {
-      return "Hari wajib diisi untuk recurring mingguan";
-    }
-
-    const invalidRecipients = input.recipients.filter((email) => !isValidEmail(email));
-    if (invalidRecipients.length > 0) {
-      return `Format email tidak valid: ${invalidRecipients[0]}`;
-    }
-
-    const now = new Date();
-    const scheduleDate = new Date(`${input.date}T${input.time}:00`);
-    if (Number.isNaN(scheduleDate.getTime())) {
-      return "Format tanggal/waktu tidak valid";
-    }
-
-    if (input.frequency === "once" && scheduleDate <= now) {
-      return "Jadwal once harus lebih besar dari waktu saat ini";
-    }
-
-    const startDateOnly = new Date(`${input.date}T00:00:00`);
-    const todayDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (input.frequency !== "once" && startDateOnly < todayDateOnly) {
-      return "Start date recurring tidak boleh di masa lalu";
-    }
-
-    return null;
-  };
+  const [emailTab, setEmailTab] = useState<"blast" | "reminder">("blast");
 
   useEffect(() => {
     const load = async () => {
@@ -204,7 +154,7 @@ export default function OperationsPage() {
     if (!qrCodeUrl) return;
     const link = document.createElement("a");
     link.href = qrCodeUrl;
-    link.download = `qr-${surveyId}.png`;
+    link.download = `qr-${toDownloadFileStem(surveyTitle, "survey")}.png`;
     link.click();
   };
 
@@ -225,8 +175,6 @@ export default function OperationsPage() {
       date: blastDate,
       time: blastTime,
       frequency: blastFrequency,
-      subject: blastSubject,
-      messageText: blastMessage,
       recipients: recipientEmails,
       dayOfWeek: blastFrequency === "weekly" ? blastDayOfWeek : undefined,
     });
@@ -275,8 +223,6 @@ export default function OperationsPage() {
       date: reminderDate,
       time: reminderTime,
       frequency: reminderFrequency,
-      subject: reminderSubject,
-      messageText: reminderMessage,
       recipients: recipientEmails,
       dayOfWeek: reminderFrequency === "weekly" ? reminderDayOfWeek : undefined,
     });
@@ -315,22 +261,6 @@ export default function OperationsPage() {
     setReminderMessage("");
     setReminderRecipients("");
     await loadOperations();
-  };
-
-  const formatDate = (date?: string | null, time?: string | null) => {
-    const raw = date || "";
-    if (!raw) return "-";
-    const d = time ? new Date(`${raw}T${time}`) : new Date(raw);
-    if (Number.isNaN(d.getTime())) return "-";
-    return d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
-  };
-
-  const getStatusBadge = (status: string) => {
-    const normalized = String(status || "").toLowerCase();
-    if (normalized === "pending") return styles.badgePending;
-    if (normalized === "completed") return styles.badgeCompleted;
-    if (normalized === "failed") return styles.badgeFailed;
-    return styles.badgeCancelled;
   };
 
   if (loading) return <div className={styles.wrapper}>Memuat...</div>;
@@ -439,143 +369,228 @@ export default function OperationsPage() {
         ) : null}
       </section>
 
-      <section className={styles.grid}>
-        <div className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <h2 className={styles.panelTitle}>Schedule Blast</h2>
-            <button
-              type="button"
-              className={styles.infoButton}
-              onClick={() => toggleInfoPanel("blast")}
-              aria-label="Info Schedule Blast"
-            >
-              i
-            </button>
-          </div>
-          {openInfoPanel === "blast" ? (
-            <div className={styles.infoText}>Blast mengirim undangan survey pertama ke target penerima.</div>
-          ) : null}
-          <label className={styles.formLabel}>
-            Frequency
-            <Dropdown
-              className={styles.input}
-              options={frequencyOptions}
-              value={blastFrequency}
-              onChange={(value) => setBlastFrequency(value as ScheduleFrequency)}
-              fullWidth
-            />
-          </label>
-          {blastFrequency === "weekly" ? (
-            <label className={styles.formLabel}>
-              Hari Kirim (Weekly)
-              <Dropdown
-                className={styles.input}
-                options={dayOfWeekOptions}
-                value={blastDayOfWeek}
-                onChange={(value) => setBlastDayOfWeek(value as DayOfWeekValue)}
-                fullWidth
-              />
-            </label>
-          ) : null}
-          {blastFrequency === "monthly" ? <div className={styles.infoText}>Monthly akan dijalankan pada tanggal start date setiap bulan, di waktu yang dipilih.</div> : null}
-          <div className={styles.formGrid}>
-            <label>
-              {blastFrequency === "once" ? "Tanggal" : "Start Date"}
-              <input type="date" value={blastDate} onChange={(e) => setBlastDate(e.target.value)} className={styles.input} />
-            </label>
-            <label>
-              {blastFrequency === "once" ? "Waktu" : "Schedule Time"}
-              <input type="time" value={blastTime} onChange={(e) => setBlastTime(e.target.value)} className={styles.input} />
-            </label>
-          </div>
-          <label className={styles.formLabel}>
-            Email Subject
-            <input type="text" value={blastSubject} onChange={(e) => setBlastSubject(e.target.value)} className={styles.input} placeholder="Contoh: Undangan Survey IT Maret 2026" />
-          </label>
-          <label className={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={blastIncludeQrCode}
-              onChange={(event) => setBlastIncludeQrCode(event.target.checked)}
-            />
-            Lampirkan QR Code di email blast
-          </label>
-          <label className={styles.formLabel}>
-            Email Recipients (opsional)
-            <input type="text" value={blastRecipients} onChange={(e) => setBlastRecipients(e.target.value)} className={styles.input} placeholder="email1@example.com, email2@example.com" />
-          </label>
-          <label className={styles.formLabel}>
-            Email Message
-            <textarea value={blastMessage} onChange={(e) => setBlastMessage(e.target.value)} className={styles.textarea} rows={3} placeholder="Tulis pesan email blast..." />
-          </label>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void handleScheduleBlast()} disabled={blastLoading} type="button">
-            {blastLoading ? "Scheduling..." : "Schedule Blast"}
+      <section className={styles.panelFull}>
+        {/* Tab switcher */}
+        <div className={styles.emailTabBar}>
+          <button
+            type="button"
+            className={`${styles.emailTab} ${emailTab === "blast" ? styles.emailTabActive : ""}`}
+            onClick={() => setEmailTab("blast")}
+          >
+            📧 Schedule Blast
+          </button>
+          <button
+            type="button"
+            className={`${styles.emailTab} ${emailTab === "reminder" ? styles.emailTabActive : ""}`}
+            onClick={() => setEmailTab("reminder")}
+          >
+            🔔 Schedule Reminder
           </button>
         </div>
-        <div className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <h2 className={styles.panelTitle}>Schedule Reminder</h2>
-            <button
-              type="button"
-              className={styles.infoButton}
-              onClick={() => toggleInfoPanel("reminder")}
-              aria-label="Info Schedule Reminder"
-            >
-              i
-            </button>
+
+        {/* ── Blast ── */}
+        {emailTab === "blast" ? (
+          <div className={styles.emailForm}>
+            <p className={styles.emailFormDesc}>Kirim undangan survey pertama ke target penerima</p>
+
+            <div className={styles.emailFormGrid}>
+              {/* Kolom kiri */}
+              <div className={styles.emailFormCol}>
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Jadwal Pengiriman</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="blast-freq">Frekuensi</label>
+                    <Dropdown
+                      className={styles.input}
+                      options={frequencyOptions}
+                      value={blastFrequency}
+                      onChange={(value) => setBlastFrequency(value as ScheduleFrequency)}
+                      fullWidth
+                    />
+                  </div>
+                  {blastFrequency === "weekly" ? (
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Hari Kirim</label>
+                      <Dropdown
+                        className={styles.input}
+                        options={dayOfWeekOptions}
+                        value={blastDayOfWeek}
+                        onChange={(value) => setBlastDayOfWeek(value as DayOfWeekValue)}
+                        fullWidth
+                      />
+                    </div>
+                  ) : null}
+                  {blastFrequency === "monthly" ? (
+                    <div className={styles.infoChip}>ℹ️ Dikirim setiap bulan pada tanggal start date</div>
+                  ) : null}
+                  <div className={styles.formRow2}>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel} htmlFor="blast-date">
+                        {blastFrequency === "once" ? "Tanggal" : "Start Date"}
+                      </label>
+                      <input id="blast-date" type="date" value={blastDate} onChange={(e) => setBlastDate(e.target.value)} className={styles.input} />
+                    </div>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel} htmlFor="blast-time">
+                        {blastFrequency === "once" ? "Waktu" : "Jam Kirim"}
+                      </label>
+                      <input id="blast-time" type="time" value={blastTime} onChange={(e) => setBlastTime(e.target.value)} className={styles.input} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Penerima</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="blast-recipients">
+                      Email Penerima
+                      <span className={styles.fieldHint}> — pisahkan dengan koma. Kosongkan untuk kirim ke semua responden terdaftar.</span>
+                    </label>
+                    <textarea
+                      id="blast-recipients"
+                      value={blastRecipients}
+                      onChange={(e) => setBlastRecipients(e.target.value)}
+                      className={styles.textarea}
+                      rows={3}
+                      placeholder="email1@astraotoparts.co.id, email2@astraotoparts.co.id"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Kolom kanan */}
+              <div className={styles.emailFormCol}>
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Konten Email</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="blast-subject">Subject Email</label>
+                    <input id="blast-subject" type="text" value={blastSubject} onChange={(e) => setBlastSubject(e.target.value)} className={styles.input} placeholder="Contoh: Undangan Survey IT 2026" />
+                  </div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="blast-msg">Pesan Email</label>
+                    <textarea id="blast-msg" value={blastMessage} onChange={(e) => setBlastMessage(e.target.value)} className={styles.textarea} rows={5} placeholder={"Contoh:\nBapak/Ibu yang kami hormati,\n\nKami mengundang Anda untuk berpartisipasi pada survey kepuasan IT 2026.\n\nTerima kasih atas partisipasi Anda."} />
+                    <span className={styles.fieldHint}>Kosongkan untuk menggunakan teks default. Isi untuk mengganti seluruh isi pesan email.</span>
+                  </div>
+                  <label className={styles.checkboxRow}>
+                    <input type="checkbox" checked={blastIncludeQrCode} onChange={(e) => setBlastIncludeQrCode(e.target.checked)} />
+                    Lampirkan QR Code di email
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.emailFormFooter}>
+              <button
+                className={`${styles.btn} ${styles.btnPrimary} ${styles.emailSubmitBtn}`}
+                onClick={() => void handleScheduleBlast()}
+                disabled={blastLoading}
+                type="button"
+              >
+                {blastLoading ? "Menjadwalkan..." : "🚀 Schedule Blast"}
+              </button>
+            </div>
           </div>
-          {openInfoPanel === "reminder" ? (
-            <div className={styles.infoText}>Reminder dipakai untuk follow-up responden yang belum mengisi.</div>
-          ) : null}
-          <label className={styles.formLabel}>
-            Frequency
-            <Dropdown
-              className={styles.input}
-              options={frequencyOptions}
-              value={reminderFrequency}
-              onChange={(value) => setReminderFrequency(value as ScheduleFrequency)}
-              fullWidth
-            />
-          </label>
-          {reminderFrequency === "weekly" ? (
-            <label className={styles.formLabel}>
-              Hari Kirim (Weekly)
-              <Dropdown
-                className={styles.input}
-                options={dayOfWeekOptions}
-                value={reminderDayOfWeek}
-                onChange={(value) => setReminderDayOfWeek(value as DayOfWeekValue)}
-                fullWidth
-              />
-            </label>
-          ) : null}
-          {reminderFrequency === "monthly" ? <div className={styles.infoText}>Monthly akan dijalankan pada tanggal start date setiap bulan, di waktu yang dipilih.</div> : null}
-          <div className={styles.formGrid}>
-            <label>
-              {reminderFrequency === "once" ? "Tanggal" : "Start Date"}
-              <input type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} className={styles.input} />
-            </label>
-            <label>
-              {reminderFrequency === "once" ? "Waktu" : "Schedule Time"}
-              <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className={styles.input} />
-            </label>
+        ) : null}
+
+        {/* ── Reminder ── */}
+        {emailTab === "reminder" ? (
+          <div className={styles.emailForm}>
+            <p className={styles.emailFormDesc}>Follow-up responden yang belum mengisi survey</p>
+
+            <div className={styles.emailFormGrid}>
+              {/* Kolom kiri */}
+              <div className={styles.emailFormCol}>
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Jadwal Pengiriman</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="rem-freq">Frekuensi</label>
+                    <Dropdown
+                      className={styles.input}
+                      options={frequencyOptions}
+                      value={reminderFrequency}
+                      onChange={(value) => setReminderFrequency(value as ScheduleFrequency)}
+                      fullWidth
+                    />
+                  </div>
+                  {reminderFrequency === "weekly" ? (
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Hari Kirim</label>
+                      <Dropdown
+                        className={styles.input}
+                        options={dayOfWeekOptions}
+                        value={reminderDayOfWeek}
+                        onChange={(value) => setReminderDayOfWeek(value as DayOfWeekValue)}
+                        fullWidth
+                      />
+                    </div>
+                  ) : null}
+                  {reminderFrequency === "monthly" ? (
+                    <div className={styles.infoChip}>ℹ️ Dikirim setiap bulan pada tanggal start date</div>
+                  ) : null}
+                  <div className={styles.formRow2}>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel} htmlFor="rem-date">
+                        {reminderFrequency === "once" ? "Tanggal" : "Start Date"}
+                      </label>
+                      <input id="rem-date" type="date" value={reminderDate} onChange={(e) => setReminderDate(e.target.value)} className={styles.input} />
+                    </div>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel} htmlFor="rem-time">
+                        {reminderFrequency === "once" ? "Waktu" : "Jam Kirim"}
+                      </label>
+                      <input id="rem-time" type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} className={styles.input} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Penerima</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="rem-recipients">
+                      Email Penerima
+                      <span className={styles.fieldHint}> — pisahkan dengan koma. Kosongkan untuk kirim ke semua non-responden.</span>
+                    </label>
+                    <textarea
+                      id="rem-recipients"
+                      value={reminderRecipients}
+                      onChange={(e) => setReminderRecipients(e.target.value)}
+                      className={styles.textarea}
+                      rows={3}
+                      placeholder="email1@astraotoparts.co.id, email2@astraotoparts.co.id"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Kolom kanan */}
+              <div className={styles.emailFormCol}>
+                <div className={styles.formSection}>
+                  <div className={styles.formSectionTitle}>Konten Email</div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="rem-subject">Subject Email</label>
+                    <input id="rem-subject" type="text" value={reminderSubject} onChange={(e) => setReminderSubject(e.target.value)} className={styles.input} placeholder="Contoh: Reminder Survey IT 2026" />
+                  </div>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel} htmlFor="rem-msg">Pesan Email</label>
+                    <textarea id="rem-msg" value={reminderMessage} onChange={(e) => setReminderMessage(e.target.value)} className={styles.textarea} rows={5} placeholder={"Contoh:\nYth. Bapak/Ibu,\n\nIni adalah pengingat bahwa survey akan segera berakhir.\nMohon segera isi sebelum batas waktu.\n\nTerima kasih."} />
+                    <span className={styles.fieldHint}>Kosongkan untuk menggunakan teks default. Isi untuk mengganti seluruh isi pesan email.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.emailFormFooter}>
+              <button
+                className={`${styles.btn} ${styles.btnPrimary} ${styles.emailSubmitBtn}`}
+                onClick={() => void handleScheduleReminder()}
+                disabled={reminderLoading}
+                type="button"
+              >
+                {reminderLoading ? "Menjadwalkan..." : "🔔 Schedule Reminder"}
+              </button>
+            </div>
           </div>
-          <label className={styles.formLabel}>
-            Email Subject
-            <input type="text" value={reminderSubject} onChange={(e) => setReminderSubject(e.target.value)} className={styles.input} placeholder="Contoh: Reminder Survey IT Maret 2026" />
-          </label>
-          <label className={styles.formLabel}>
-            Email Recipients (opsional)
-            <input type="text" value={reminderRecipients} onChange={(e) => setReminderRecipients(e.target.value)} className={styles.input} placeholder="email1@example.com, email2@example.com" />
-          </label>
-          <label className={styles.formLabel}>
-            Email Message
-            <textarea value={reminderMessage} onChange={(e) => setReminderMessage(e.target.value)} className={styles.textarea} rows={3} placeholder="Tulis pesan reminder..." />
-          </label>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void handleScheduleReminder()} disabled={reminderLoading} type="button">
-            {reminderLoading ? "Scheduling..." : "Schedule Reminder"}
-          </button>
-        </div>
+        ) : null}
       </section>
 
       <section className={styles.panelFull}>
@@ -600,7 +615,7 @@ export default function OperationsPage() {
                 {operations.map((op, index) => (
                   <tr key={op.operationId || `${op.operationType}-${op.scheduledDate}-${index}`}>
                     <td>{op.operationType || "-"}</td>
-                    <td>{formatDate(op.scheduledDate, op.scheduledTime)}</td>
+                    <td>{formatOperationDate(op.scheduledDate, op.scheduledTime)}</td>
                     <td>{op.frequency || "-"}</td>
                     <td>
                       <span className={`${styles.badge} ${getStatusBadge(op.status)}`}>
@@ -628,29 +643,13 @@ export default function OperationsPage() {
         )}
       </section>
 
-      {cancelTarget ? (
-        <div className={styles.modalOverlay} onClick={() => setCancelTarget(null)}>
-          <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>Cancel Scheduled Operation</h3>
-            </div>
-            <div className={styles.modalBody}>
-              <p className={styles.modalText}>
-                Yakin ingin membatalkan {cancelTarget.operationType || "operation"} yang dijadwalkan pada{" "}
-                {formatDate(cancelTarget.scheduledDate, cancelTarget.scheduledTime)}?
-              </p>
-            </div>
-            <div className={styles.modalActions}>
-              <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => setCancelTarget(null)}>
-                Batal
-              </button>
-              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void handleCancel(cancelTarget.operationId)}>
-                Ya, Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <CancelScheduledOperationDialog
+        cancelTarget={cancelTarget}
+        onCancel={() => setCancelTarget(null)}
+        onConfirm={(operationId) => {
+          void handleCancel(operationId);
+        }}
+      />
     </div>
   );
 }

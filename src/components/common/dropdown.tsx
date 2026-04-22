@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import styles from "./dropdown.module.css";
 
 type DropdownOption = {
   label: string;
@@ -8,6 +9,7 @@ type DropdownOption = {
 };
 
 type DropdownProps = {
+  id?: string;
   className?: string;
   options: DropdownOption[];
   value: string;
@@ -15,9 +17,12 @@ type DropdownProps = {
   disabled?: boolean;
   placeholder?: string;
   fullWidth?: boolean;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 };
 
 export function Dropdown({
+  id,
   className = "",
   options,
   value,
@@ -25,27 +30,24 @@ export function Dropdown({
   disabled = false,
   placeholder = "Select...",
   fullWidth = false,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
-  const displayText = selectedOption?.label || placeholder;
+  const displayText = selectedOption?.label ?? placeholder;
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
   }, [isOpen]);
 
   const handleSelect = (optionValue: string) => {
@@ -55,70 +57,47 @@ export function Dropdown({
 
   return (
     <div
-      ref={dropdownRef}
-      style={{
-        position: "relative",
-        display: fullWidth ? "block" : "inline-block",
-        width: fullWidth ? "100%" : "auto",
-      }}
+      ref={wrapperRef}
+      className={`${styles.wrapper} ${fullWidth ? styles.wrapperFull : ""}`}
     >
       <button
         type="button"
-        className={className}
+        id={id}
+        className={`${styles.trigger} ${isOpen ? styles.triggerOpen : ""} ${className}`}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         disabled={disabled}
-        style={{
-          width: "100%",
-          cursor: disabled ? "not-allowed" : "pointer",
-          userSelect: "none",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          opacity: disabled ? 0.6 : 1,
-        }}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
       >
-        <span>{displayText}</span>
-        <span style={{ fontSize: "10px", marginLeft: "8px" }}>{isOpen ? "^" : "v"}</span>
+        <span className={styles.triggerLabel}>{displayText}</span>
+        <svg
+          className={`${styles.chevron} ${isOpen ? styles.chevronOpen : ""}`}
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       {isOpen && !disabled ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            zIndex: 1000,
-            background: "#ffffff",
-            border: "1px solid #d1d5db",
-            borderRadius: "8px",
-            marginTop: "4px",
-            maxHeight: "240px",
-            overflowY: "auto",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-          }}
-        >
+        <div className={styles.menu} role="listbox">
           {options.map((option) => (
-            <div
+            <button
               key={option.value}
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              className={`${styles.option} ${option.value === value ? styles.optionSelected : ""}`}
               onClick={() => handleSelect(option.value)}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                padding: "10px 14px",
-                background: value === option.value ? "#f3f4f6" : "#ffffff",
-                color: "#111827",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: value === option.value ? 600 : 400,
-              }}
             >
               {option.label}
-            </div>
+            </button>
           ))}
         </div>
       ) : null}
     </div>
   );
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 import type { UserListItem, UsersResponse } from "@/types/user";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
@@ -21,6 +21,7 @@ export type CreateUserInput = {
   npk?: string;
   displayName: string;
   email: string;
+  phoneNumber?: string;
   role: UserRole;
   useLDAP: boolean;
   businessUnitId: string;
@@ -34,6 +35,7 @@ export type UpdateUserInput = {
   npk?: string;
   displayName?: string;
   email?: string;
+  phoneNumber?: string;
   role?: UserRole;
   businessUnitId?: string;
   divisionId?: string;
@@ -79,6 +81,11 @@ export async function searchAdminEventUsers(search: string): Promise<{
       | { success?: boolean; users?: AdminEventUser[]; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, users: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return {
         success: false,
@@ -114,6 +121,11 @@ export async function fetchUsers(search: string): Promise<{
     });
 
     const payload = (await response.json().catch(() => null)) as UsersResponse | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, users: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return {
         success: false,
@@ -159,6 +171,11 @@ export async function fetchUsersWithFilters(input: {
     });
 
     const payload = (await response.json().catch(() => null)) as UsersResponse | null;
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, users: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || !payload?.success) {
       return {
         success: false,

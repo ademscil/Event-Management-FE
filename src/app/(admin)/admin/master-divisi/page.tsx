@@ -10,9 +10,11 @@ import { Dropdown } from "@/components/common/dropdown";
 import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import {
   createDivisionMaster,
+  downloadDivisionTemplate,
   fetchBusinessUnitsMaster,
   fetchDivisionsMaster,
   updateDivisionMaster,
+  uploadDivisionFile,
   type BusinessUnitMaster,
   type DivisionMaster,
 } from "@/lib/master-data";
@@ -26,9 +28,8 @@ type DivisionRow = DivisionMaster & { businessUnitName: string };
 function matchesSearch(item: DivisionRow, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return item.Code.toLowerCase().includes(term);
   if (searchBy === "name") return item.Name.toLowerCase().includes(term);
-  return item.Code.toLowerCase().includes(term) || item.Name.toLowerCase().includes(term);
+  return item.Name.toLowerCase().includes(term);
 }
 
 export default function MasterDivisiPage() {
@@ -37,7 +38,7 @@ export default function MasterDivisiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
-  const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [buFilter, setBuFilter] = useState("all");
@@ -49,7 +50,6 @@ export default function MasterDivisiPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<DivisionMaster | null>(null);
   const [businessUnitId, setBusinessUnitId] = useState("");
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState("Active");
   const [submitting, setSubmitting] = useState(false);
@@ -123,7 +123,6 @@ export default function MasterDivisiPage() {
   const openCreate = () => {
     setEditing(null);
     setBusinessUnitId("");
-    setCode("");
     setName("");
     setActive("Active");
     setShowModal(true);
@@ -132,7 +131,6 @@ export default function MasterDivisiPage() {
   const openEdit = (row: DivisionRow) => {
     setEditing(row);
     setBusinessUnitId(row.BusinessUnitId || "");
-    setCode(row.Code || "");
     setName(row.Name || "");
     setActive(row.IsActive ? "Active" : "Inactive");
     setShowModal(true);
@@ -145,8 +143,8 @@ export default function MasterDivisiPage() {
   };
 
   const onSubmit = async () => {
-    if (!businessUnitId || !code.trim() || !name.trim()) {
-      showFeedback("BU, Divisi Code, dan Divisi Name wajib diisi.", "Validasi");
+    if (!businessUnitId || !name.trim()) {
+      showFeedback("BU dan Divisi Name wajib diisi.", "Validasi");
       return;
     }
 
@@ -154,7 +152,6 @@ export default function MasterDivisiPage() {
     if (!editing) {
       const result = await createDivisionMaster({
         businessUnitId,
-        code: code.trim(),
         name: name.trim(),
       });
       setSubmitting(false);
@@ -169,7 +166,6 @@ export default function MasterDivisiPage() {
 
     const result = await updateDivisionMaster(editing.DivisionId, {
       businessUnitId,
-      code: code.trim(),
       name: name.trim(),
       isActive: active === "Active",
     });
@@ -212,19 +208,61 @@ export default function MasterDivisiPage() {
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     setUploadFileName(file?.name || "No file chosen");
-    setUploadInfo("");
   };
 
   const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Master Divisi belum tersedia.");
+    void (async () => {
+      const result = await downloadDivisionTemplate();
+      if (!result.success || !result.blob) {
+        showFeedback(result.message || "Gagal download template", "Gagal Download");
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename || "master-divisi-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    })();
   };
 
   const onUploadMaster = () => {
-    if (uploadFileName === "No file chosen") {
-      setUploadInfo("Pilih file terlebih dahulu.");
-      return;
-    }
-    setUploadInfo("Upload bulk Master Divisi belum tersedia.");
+    void (async () => {
+      const fileInput = document.getElementById("master-divisi-file") as HTMLInputElement | null;
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showFeedback("Pilih file Excel terlebih dahulu.", "Validasi");
+        return;
+      }
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+        showFeedback("Format file harus Excel (.xlsx atau .xls).", "Validasi");
+        return;
+      }
+      setUploadLoading(true);
+      const result = await uploadDivisionFile(file);
+      setUploadLoading(false);
+      if (!result.success) {
+        showFeedback(result.message || "Gagal upload file", "Gagal Upload");
+        return;
+      }
+      let message = `Upload berhasil! Imported: ${result.imported ?? 0}, Updated: ${result.updated ?? 0}, Gagal: ${result.failed ?? 0}`;
+      if (result.errors && result.errors.length > 0) {
+        message += "\n\nErrors:\n";
+        result.errors.slice(0, 5).forEach((err) => {
+          message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
+        });
+        if (result.errors.length > 5) {
+          message += `... dan ${result.errors.length - 5} error lainnya`;
+        }
+      }
+      showFeedback(message, "Upload Selesai");
+      setUploadFileName("No file chosen");
+      if (fileInput) fileInput.value = "";
+      await loadData();
+    })();
   };
 
   return (
@@ -244,38 +282,39 @@ export default function MasterDivisiPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>BU</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
-              value={buFilter}
-              onChange={setBuFilter}
-            />
-          </div>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label id="mdiv-bu-label" className={styles.filterLabel} htmlFor="mdiv-bu-dropdown">BU</label>
+              <Dropdown
+                id="mdiv-bu-dropdown"
+                className={styles.filterSelect}
+                fullWidth
+                options={[{ value: "all", label: "All BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
+                value={buFilter}
+                onChange={setBuFilter}
+                aria-labelledby="mdiv-bu-label"
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label id="mdiv-status-label" className={styles.filterLabel} htmlFor="mdiv-status-dropdown">Status</label>
+              <Dropdown
+                id="mdiv-status-dropdown"
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-labelledby="mdiv-status-label"
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -302,11 +341,11 @@ export default function MasterDivisiPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>BU</th>
-                    <th>Divisi Code</th>
-                    <th>Divisi Name</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">BU</th>
+                    <th scope="col">Divisi Name</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -315,10 +354,10 @@ export default function MasterDivisiPage() {
                       <td colSpan={5}>Tidak ada data divisi</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.DivisionId}>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.businessUnitName}</td>
-                        <td>{item.Code}</td>
                         <td>{item.Name}</td>
                         <td>
                           <span className={`${styles.badge} ${item.IsActive ? styles.badgeActive : styles.badgeClosed}`}>
@@ -363,7 +402,7 @@ export default function MasterDivisiPage() {
           <span className={styles.meta}>Unggah data master divisi dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-divisi-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -381,45 +420,43 @@ export default function MasterDivisiPage() {
             <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster}>
-              Upload
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster} disabled={uploadLoading}>
+              {uploadLoading ? "Uploading..." : "Upload"}
             </button>
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom minimal: BU, Divisi Code, Divisi Name, Status.
+          Format file: Excel (.xlsx/.xls). Kolom: BU Name, Divisi Name, Status. Download template untuk format yang benar.
         </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit Divisi" : "Add Divisi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-divisi-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit Divisi" : "Add Divisi"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-divisi-modal-title" className={styles.modalTitle}>{editing ? "Edit Divisi" : "Add Divisi"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>BU</label>
+                <label id="mdiv-modal-bu-label" className={styles.label} htmlFor="mdiv-modal-bu-dropdown">BU</label>
                 <Dropdown
+                  id="mdiv-modal-bu-dropdown"
                   className={styles.select}
                   options={[{ value: "", label: "Pilih BU" }, ...businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))]}
                   value={businessUnitId}
                   onChange={setBusinessUnitId}
+                  aria-labelledby="mdiv-modal-bu-label"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Divisi Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. ITD" />
+                <label className={styles.label} htmlFor="master-divisi-name-input">Divisi Name</label>
+                <input id="master-divisi-name-input" name="divisiName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Divisi Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. IT Digital" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Status</label>
+                <label id="mdiv-modal-status-label" className={styles.label} htmlFor="mdiv-modal-status-dropdown">Status</label>
                 <Dropdown
+                  id="mdiv-modal-status-dropdown"
                   className={styles.select}
                   options={[
                     { value: "Active", label: "Active" },
@@ -427,6 +464,7 @@ export default function MasterDivisiPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-labelledby="mdiv-modal-status-label"
                 />
               </div>
             </div>

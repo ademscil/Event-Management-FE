@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -100,6 +100,19 @@ export async function fetchAuditLogs(
         }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return {
+        success: false,
+        logs: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        message: "Sesi telah berakhir, silakan login kembali",
+      };
+    }
     if (!response.ok || payload?.success !== true) {
       return {
         success: false,

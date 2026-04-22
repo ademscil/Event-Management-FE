@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken, getCurrentUser } from "@/lib/auth";
+import { clearSession, getAccessToken, getCurrentUser } from "@/lib/auth";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
 
@@ -44,6 +44,7 @@ export interface GeneratedReport {
     BusinessUnitName: string;
     DivisionName: string;
     DepartmentName: string;
+    FunctionName?: string | null;
     ApplicationName: string;
     PromptText: string;
     QuestionType: string;
@@ -79,6 +80,21 @@ function extractError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function parseFilenameFromDisposition(headerValue: string | null, fallback: string): string {
+  const input = String(headerValue || "");
+  const utf8Match = input.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const basicMatch = input.match(/filename="?([^";]+)"?/i);
+  if (basicMatch?.[1]) return basicMatch[1];
+  return fallback;
+}
+
 export async function fetchReportSelectionList(): Promise<{
   success: boolean;
   surveys: ReportSelectionItem[];
@@ -97,6 +113,11 @@ export async function fetchReportSelectionList(): Promise<{
       | { success?: boolean; surveys?: ReportSelectionItem[]; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, surveys: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || payload?.success !== true || !Array.isArray(payload.surveys)) {
       return { success: false, surveys: [], message: extractError(payload, "Gagal memuat data report") };
     }
@@ -139,8 +160,60 @@ export async function generateSurveyReport(input: {
       | { success?: boolean; report?: GeneratedReport; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || payload?.success !== true || !payload.report) {
       return { success: false, message: extractError(payload, "Gagal generate report") };
+    }
+
+    return { success: true, report: payload.report };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function fetchSurveyReport(input: {
+  surveyId: string;
+  includeTakenOut?: boolean;
+  businessUnitId?: string;
+  divisionId?: string;
+  departmentId?: string;
+  functionId?: string;
+  applicationId?: string;
+}): Promise<{ success: boolean; report?: GeneratedReport; message?: string }> {
+  const token = getAccessToken();
+  const user = getCurrentUser();
+  if (!token || !user) return { success: false, message: "Sesi login tidak ditemukan" };
+
+  try {
+    const response = await fetch(`${API_BASE_PATH}/reports/view`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...input,
+        includeTakenOut: input.includeTakenOut ?? false,
+        userId: String(user.userId),
+        userRole: user.role,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; report?: GeneratedReport; message?: string; error?: string }
+      | null;
+
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+    }
+    if (!response.ok || payload?.success !== true || !payload.report) {
+      return { success: false, message: extractError(payload, "Gagal memuat report") };
     }
 
     return { success: true, report: payload.report };
@@ -169,6 +242,11 @@ export async function fetchTakeoutComparison(input: {
       | { success?: boolean; comparison?: TakeoutComparisonRow[]; message?: string; error?: string }
       | null;
 
+    if (response.status === 401) {
+      clearSession();
+      if (typeof window !== "undefined") window.location.href = "/admin/login";
+      return { success: false, comparison: [], message: "Sesi telah berakhir, silakan login kembali" };
+    }
     if (!response.ok || payload?.success !== true || !Array.isArray(payload.comparison)) {
       return { success: false, comparison: [], message: extractError(payload, "Gagal memuat data takeout comparison") };
     }
@@ -204,12 +282,18 @@ export async function exportSurveyReport(input: {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        clearSession();
+        if (typeof window !== "undefined") window.location.href = "/admin/login";
+        return { success: false, message: "Sesi telah berakhir, silakan login kembali" };
+      }
       const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
       return { success: false, message: extractError(payload, "Gagal export report") };
     }
 
     const blob = await response.blob();
-    const filename = input.format === "excel" ? "report.xlsx" : "report.pdf";
+    const fallbackFilename = input.format === "excel" ? "report.xlsx" : "report.pdf";
+    const filename = parseFilenameFromDisposition(response.headers.get("Content-Disposition"), fallbackFilename);
     return { success: true, blob, filename };
   } catch {
     return { success: false, message: "Gagal terhubung ke server" };

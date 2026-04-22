@@ -6,6 +6,7 @@ export interface SurveyOverviewItem {
   Status: "Draft" | "Active" | "Closed" | "Archived" | string;
   AssignedAdminName?: string | null;
   AssignedAdminNames?: string[];
+  AssignedAdminUsernames?: string[];
   AssignedAdminIds?: string[];
   TargetRespondents: number | null;
   TargetScore: number | null;

@@ -25,6 +25,12 @@ function clearLegacyLocalStorage(): void {
   localStorage.removeItem(USER_KEY);
 }
 
+/**
+ * @deprecated Legacy function that reads token from localStorage.
+ * This is only used internally for the logout request and validateSession.
+ * All other API calls use cookie-based auth via credentials: "include".
+ * Do NOT use this in new code — use getAccessToken() + Authorization header pattern instead.
+ */
 function buildAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const token = hasStorage() && typeof window.localStorage !== "undefined"
     ? window.localStorage.getItem(TOKEN_KEY)
@@ -103,6 +109,70 @@ export async function login(
     }
 
     return { success: true, user: payload.user as AuthUser };
+  } catch {
+    return {
+      success: false,
+      message: "Gagal terhubung ke server",
+    };
+  }
+}
+
+export async function requestPasswordReset(
+  method: "email" | "phone",
+  identifier: string,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_PATH}/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ method, identifier }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      return {
+        success: false,
+        message: getErrorMessage(payload, "Gagal memproses forgot password"),
+      };
+    }
+
+    return {
+      success: true,
+      message: typeof payload?.message === "string" ? payload.message : "Permintaan reset password berhasil diproses",
+    };
+  } catch {
+    return {
+      success: false,
+      message: "Gagal terhubung ke server",
+    };
+  }
+}
+
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const response = await fetch(`${API_BASE_PATH}/auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token, password }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.success) {
+      return {
+        success: false,
+        message: getErrorMessage(payload, "Gagal mereset password"),
+      };
+    }
+
+    return {
+      success: true,
+      message: typeof payload?.message === "string" ? payload.message : "Password berhasil direset",
+    };
   } catch {
     return {
       success: false,

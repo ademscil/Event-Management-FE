@@ -1,6 +1,7 @@
 "use client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { formatEventPeriod, resolveEventStatus } from "@/lib/event-status";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
 import type { SurveyOverviewItem } from "@/types/survey";
@@ -8,17 +9,6 @@ import { useEffect, useMemo, useState } from "react";
 import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import styles from "../page-mockup.module.css";
-
-function formatPeriod(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const format = new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  return `${format.format(start)} - ${format.format(end)}`;
-}
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
@@ -56,26 +46,48 @@ export default function DashboardPage() {
   const [appliedKeyword, setAppliedKeyword] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
-      const result = await fetchSurveyOverview();
-      setLoading(false);
-      if (!result.success) {
-        setError(result.message || "Gagal memuat data survey");
+      setLoading(true);
+
+      try {
+        const result = await fetchSurveyOverview();
+        if (!active) return;
+
+        if (!result.success) {
+          setError(result.message || "Gagal memuat data survey");
+          setSurveys([]);
+          return;
+        }
+
+        setError("");
+        setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
+      } catch {
+        if (!active) return;
+        setError("Terjadi kesalahan saat memuat data survey");
         setSurveys([]);
-        return;
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setError("");
-      setSurveys(result.surveys.filter((survey) => survey.Status !== "Draft"));
     })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredSurveys = useMemo(() => {
     const normalizedKeyword = appliedKeyword.trim().toLowerCase();
 
     return surveys.filter((survey) => {
+      const effectiveStatus = resolveEventStatus(survey);
+
       if (!matchesDateRange(survey, periodStart, periodEnd)) return false;
 
-      if (statusFilter !== "all" && survey.Status.toLowerCase() !== statusFilter) return false;
+      if (statusFilter !== "all" && effectiveStatus.toLowerCase() !== statusFilter) return false;
 
       if (!normalizedKeyword) return true;
 
@@ -83,10 +95,7 @@ export default function DashboardPage() {
         return survey.Title.toLowerCase().includes(normalizedKeyword);
       }
 
-      return (
-        survey.Title.toLowerCase().includes(normalizedKeyword) ||
-        survey.Status.toLowerCase().includes(normalizedKeyword)
-      );
+      return survey.Title.toLowerCase().includes(normalizedKeyword);
     });
   }, [surveys, periodStart, periodEnd, statusFilter, appliedKeyword, appliedSearchBy]);
 
@@ -122,52 +131,21 @@ export default function DashboardPage() {
 
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
-        <div className={styles.periodRow}>
-          <div className={styles.periodLabel}>PERIODE</div>
-          <div className={styles.periodColon}>:</div>
-          <input
-            id="periodStart"
-            className={`${styles.input} ${styles.periodInput}`}
-            type="date"
-            value={periodStart}
-            onChange={(event) => setPeriodStart(event.target.value)}
-          />
-          <input
-            className={`${styles.input} ${styles.periodInput}`}
-            type="date"
-            value={periodEnd}
-            onChange={(event) => setPeriodEnd(event.target.value)}
-          />
+        <div className={styles.filterToolbar}>
+          <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
+            <label className={styles.filterLabel} htmlFor="dashPeriodStart">Periode Mulai</label>
+            <input id="dashPeriodStart" name="dashPeriodStart" className={styles.filterControl} type="date" aria-label="Tanggal mulai periode" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+          </div>
+          <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
+            <label className={styles.filterLabel} htmlFor="dashPeriodEnd">Periode Akhir</label>
+            <input id="dashPeriodEnd" name="dashPeriodEnd" className={styles.filterControl} type="date" aria-label="Tanggal akhir periode" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+          </div>
+          <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
+            <label id="dash-status-label" className={styles.filterLabel} htmlFor="dash-status-dropdown">Status</label>
+            <Dropdown id="dash-status-dropdown" className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} aria-labelledby="dash-status-label" />
+          </div>
+          <SearchBar options={[{ value: "all", label: "Search By" }, { value: "event", label: "Event" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} onButtonClick={onApplySearch} placeholder="Cari event..." />
         </div>
-        <div className={styles.periodRow}>
-          <div className={styles.periodLabel}>STATUS</div>
-          <div className={styles.periodColon}>:</div>
-          <Dropdown
-            className={`${styles.select} ${styles.statusControl}`}
-            options={[
-              { value: "all", label: "All" },
-              { value: "active", label: "Active" },
-              { value: "closed", label: "Closed" },
-            ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        </div>
-        <SearchBar
-          rowClassName={styles.masterSearchRow}
-          selectClassName={styles.masterSearchSelect}
-          inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-          buttonClassName={styles.masterSearchButton}
-          options={[
-            { value: "all", label: "Search By" },
-            { value: "event", label: "Event" },
-          ]}
-          selectedValue={searchBy}
-          keyword={keyword}
-          onSelectedValueChange={setSearchBy}
-          onKeywordChange={setKeyword}
-          onButtonClick={onApplySearch}
-        />
       </section>
 
       <section className={styles.panel}>
@@ -182,14 +160,14 @@ export default function DashboardPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Event</th>
-                  <th>Periode</th>
-                  <th>Status</th>
-                  <th>Responden</th>
-                  <th>Target Responden</th>
-                  <th>Score</th>
-                  <th>Target Score</th>
-                  {showReportAction ? <th>Aksi</th> : null}
+                  <th scope="col">Event</th>
+                  <th scope="col">Periode</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Responden</th>
+                  <th scope="col">Target Responden</th>
+                  <th scope="col">Score</th>
+                  <th scope="col">Target Score</th>
+                  {showReportAction ? <th scope="col">Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -198,30 +176,34 @@ export default function DashboardPage() {
                     <td colSpan={showReportAction ? 8 : 7}>Tidak ada data survey</td>
                   </tr>
                 ) : (
-                  filteredSurveys.map((survey) => (
-                    <tr key={survey.SurveyId}>
-                      <td>{survey.Title}</td>
-                      <td>{formatPeriod(survey.StartDate, survey.EndDate)}</td>
-                      <td>
-                        <span
-                          className={`${styles.badge} ${
-                            survey.Status === "Active" ? styles.badgeActive : styles.badgeClosed
-                          }`}
-                        >
-                          {survey.Status}
-                        </span>
-                      </td>
-                      <td>{formatNumber(survey.RespondentCount)}</td>
-                      <td>{formatNumber(survey.TargetRespondents)}</td>
-                      <td>{formatScore(survey.CurrentScore)}</td>
-                      <td>{formatScore(survey.TargetScore)}</td>
-                      {showReportAction ? (
+                  filteredSurveys.map((survey) => {
+                    const effectiveStatus = resolveEventStatus(survey);
+
+                    return (
+                      <tr key={survey.SurveyId}>
+                        <td>{survey.Title}</td>
+                        <td>{formatEventPeriod(survey.StartDate, survey.EndDate)}</td>
                         <td>
-                          <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                          <span
+                            className={`${styles.badge} ${
+                              effectiveStatus === "Active" ? styles.badgeActive : styles.badgeClosed
+                            }`}
+                          >
+                            {effectiveStatus}
+                          </span>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))
+                        <td>{formatNumber(survey.RespondentCount)}</td>
+                        <td>{formatNumber(survey.TargetRespondents)}</td>
+                        <td>{formatScore(survey.CurrentScore)}</td>
+                        <td>{formatScore(survey.TargetScore)}</td>
+                        {showReportAction ? (
+                          <td>
+                            <a className={`${styles.btn} ${styles.btnSecondary}`} href={`/admin/report?surveyId=${survey.SurveyId}`}>View Report</a>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
