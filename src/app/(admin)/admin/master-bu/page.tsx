@@ -10,8 +10,10 @@ import { Dropdown } from "@/components/common/dropdown";
 import { FeedbackDialog } from "@/components/common/feedback-dialog";
 import {
   createBusinessUnitMaster,
+  downloadBusinessUnitTemplate,
   fetchBusinessUnitsMaster,
   updateBusinessUnitMaster,
+  uploadBusinessUnitFile,
   type BusinessUnitMaster,
 } from "@/lib/master-data";
 import styles from "../page-mockup.module.css";
@@ -23,9 +25,9 @@ type FilterStatus = "all" | "active" | "inactive";
 function matchesSearch(item: BusinessUnitMaster, searchBy: string, keyword: string): boolean {
   const term = keyword.trim().toLowerCase();
   if (!term) return true;
-  if (searchBy === "code") return (item.Code || "").toLowerCase().includes(term);
+  if (searchBy === "code") return String(item.Code || "").includes(term);
   if (searchBy === "name") return (item.Name || "").toLowerCase().includes(term);
-  return (item.Code || "").toLowerCase().includes(term) || (item.Name || "").toLowerCase().includes(term);
+  return String(item.Code || "").includes(term) || (item.Name || "").toLowerCase().includes(term);
 }
 
 export default function MasterBUPage() {
@@ -33,7 +35,7 @@ export default function MasterBUPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
-  const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [searchBy, setSearchBy] = useState("all");
@@ -43,7 +45,6 @@ export default function MasterBUPage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<BusinessUnitMaster | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [active, setActive] = useState("Active");
   const [submitting, setSubmitting] = useState(false);
@@ -100,7 +101,6 @@ export default function MasterBUPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setCode("");
     setName("");
     setActive("Active");
     setShowModal(true);
@@ -108,7 +108,6 @@ export default function MasterBUPage() {
 
   const openEdit = (row: BusinessUnitMaster) => {
     setEditing(row);
-    setCode(row.Code || "");
     setName(row.Name || "");
     setActive(row.IsActive ? "Active" : "Inactive");
     setShowModal(true);
@@ -121,14 +120,14 @@ export default function MasterBUPage() {
   };
 
   const onSubmit = async () => {
-    if (!code.trim() || !name.trim()) {
-      showFeedback("BU Code dan BU Name wajib diisi.", "Validasi");
+    if (!name.trim()) {
+      showFeedback("BU Name wajib diisi.", "Validasi");
       return;
     }
 
     setSubmitting(true);
     if (!editing) {
-      const result = await createBusinessUnitMaster({ code: code.trim(), name: name.trim() });
+      const result = await createBusinessUnitMaster({ name: name.trim() });
       setSubmitting(false);
       if (!result.success) {
         showFeedback(result.message, "Gagal Menyimpan");
@@ -140,7 +139,6 @@ export default function MasterBUPage() {
     }
 
     const result = await updateBusinessUnitMaster(editing.BusinessUnitId, {
-      code: code.trim(),
       name: name.trim(),
       isActive: active === "Active",
     });
@@ -185,19 +183,61 @@ export default function MasterBUPage() {
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0];
     setUploadFileName(file?.name || "No file chosen");
-    setUploadInfo("");
   };
 
   const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Master BU belum tersedia.");
+    void (async () => {
+      const result = await downloadBusinessUnitTemplate();
+      if (!result.success || !result.blob) {
+        showFeedback(result.message || "Gagal download template", "Gagal Download");
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename || "master-bu-template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    })();
   };
 
   const onUploadMaster = () => {
-    if (uploadFileName === "No file chosen") {
-      setUploadInfo("Pilih file terlebih dahulu.");
-      return;
-    }
-    setUploadInfo("Upload bulk Master BU belum tersedia.");
+    void (async () => {
+      const fileInput = document.getElementById("master-bu-file") as HTMLInputElement | null;
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showFeedback("Pilih file Excel terlebih dahulu.", "Validasi");
+        return;
+      }
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+        showFeedback("Format file harus Excel (.xlsx atau .xls).", "Validasi");
+        return;
+      }
+      setUploadLoading(true);
+      const result = await uploadBusinessUnitFile(file);
+      setUploadLoading(false);
+      if (!result.success) {
+        showFeedback(result.message || "Gagal upload file", "Gagal Upload");
+        return;
+      }
+      let message = `Upload berhasil! Imported: ${result.imported ?? 0}, Updated: ${result.updated ?? 0}, Gagal: ${result.failed ?? 0}`;
+      if (result.errors && result.errors.length > 0) {
+        message += "\n\nErrors:\n";
+        result.errors.slice(0, 5).forEach((err) => {
+          message += `Row ${err.row}: ${err.errors.join(", ")}\n`;
+        });
+        if (result.errors.length > 5) {
+          message += `... dan ${result.errors.length - 5} error lainnya`;
+        }
+      }
+      showFeedback(message, "Upload Selesai");
+      setUploadFileName("No file chosen");
+      if (fileInput) fileInput.value = "";
+      await loadData();
+    })();
   };
 
   return (
@@ -217,28 +257,26 @@ export default function MasterBUPage() {
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
         <form onSubmit={onSearch}>
-          <div className={styles.periodRow}>
-            <div className={styles.periodLabel}>STATUS</div>
-            <div className={styles.periodColon}>:</div>
-            <Dropdown
-              className={`${styles.select} ${styles.statusControl}`}
-              options={[
-                { value: "all", label: "All" },
-                { value: "active", label: "Active" },
-                { value: "inactive", label: "Inactive" },
-              ]}
-              value={statusFilter}
-              onChange={(value) => setStatusFilter(value as FilterStatus)}
-            />
+          <div className={styles.filterBarGrid}>
+            <div className={styles.filterField}>
+              <label className={styles.filterLabel}>Status</label>
+              <Dropdown
+                className={styles.filterSelect}
+                fullWidth
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as FilterStatus)}
+                aria-label="Filter status"
+              />
+            </div>
           </div>
           <SearchBar
-            rowClassName={styles.masterSearchRow}
-            selectClassName={styles.masterSearchSelect}
-            inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-            buttonClassName={styles.masterSearchButton}
             options={[
               { value: "all", label: "Search By" },
-              { value: "code", label: "Code" },
               { value: "name", label: "Name" },
             ]}
             selectedValue={searchBy}
@@ -265,10 +303,10 @@ export default function MasterBUPage() {
               <table className={`${styles.table} ${styles.masterTable}`}>
                 <thead>
                   <tr>
-                    <th>BU Code</th>
-                    <th>BU Name</th>
-                    <th>Status</th>
-                    <th>Aksi</th>
+                    <th scope="col">No.</th>
+                    <th scope="col">BU Name</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -277,9 +315,9 @@ export default function MasterBUPage() {
                       <td colSpan={4}>Tidak ada data business unit</td>
                     </tr>
                   ) : (
-                    paginatedRows.map((item) => (
+                    paginatedRows.map((item, index) => (
                       <tr key={item.BusinessUnitId}>
-                        <td>{item.Code}</td>
+                        <td>{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td>{item.Name}</td>
                         <td>
                           <span className={`${styles.badge} ${item.IsActive ? styles.badgeActive : styles.badgeClosed}`}>
@@ -324,7 +362,7 @@ export default function MasterBUPage() {
           <span className={styles.meta}>Unggah data master BU dari file Excel.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="master-bu-file">Pilih file</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
@@ -342,32 +380,27 @@ export default function MasterBUPage() {
             <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster}>
-              Upload
+            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMaster} disabled={uploadLoading}>
+              {uploadLoading ? "Uploading..." : "Upload"}
             </button>
           </div>
         </div>
         <div className={styles.uploadNote}>
-          Format file: Excel (.xlsx/.xls). Kolom minimal: BU Code, BU Name, Status.
+          Format file: Excel (.xlsx/.xls). Kolom minimal: BU Name, Status. BU Code di-generate otomatis.
         </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
       </section>
 
       {showModal ? (
         <div className={styles.modalOverlay} role="presentation" onClick={closeModal}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editing ? "Edit BU" : "Add BU"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="master-bu-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editing ? "Edit BU" : "Add BU"}</h2>
-              <button className={styles.modalClose} type="button" onClick={closeModal}>x</button>
+              <h2 id="master-bu-modal-title" className={styles.modalTitle}>{editing ? "Edit BU" : "Add BU"}</h2>
+              <button className={styles.modalClose} type="button" onClick={closeModal} aria-label="Tutup modal">x</button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>BU Code</label>
-                <input className={styles.input} value={code} onChange={(event) => setCode(event.target.value)} placeholder="e.g. HO" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>BU Name</label>
-                <input className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Corporate HO" />
+                <label className={styles.label} htmlFor="master-bu-name-input">BU Name</label>
+                <input id="master-bu-name-input" name="buName" className={styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Corporate HO" />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Status</label>
@@ -379,6 +412,7 @@ export default function MasterBUPage() {
                   ]}
                   value={active}
                   onChange={setActive}
+                  aria-label="Status BU"
                 />
               </div>
             </div>

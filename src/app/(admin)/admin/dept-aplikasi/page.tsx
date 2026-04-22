@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { SearchBar } from "@/components/admin/search-bar";
 import { Dropdown } from "@/components/common/dropdown";
 import {
   createDepartmentApplicationMapping,
   deleteDepartmentApplicationMapping,
   exportDepartmentApplicationMappingsCsv,
   fetchDepartmentApplicationMappingsHierarchical,
+  downloadMappingTemplate,
+  bulkImportMappings,
+  type BulkImportResult,
   type DepartmentApplicationMappingHierarchy,
 } from "@/lib/mappings";
 import {
@@ -21,6 +25,7 @@ import {
   type DivisionMaster,
 } from "@/lib/master-data";
 import styles from "../mapping-pages.module.css";
+import baseStyles from "../page-mockup.module.css";
 
 type RowItem = {
   key: string;
@@ -80,12 +85,16 @@ export default function DeptAplikasiPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [uploadFileName, setUploadFileName] = useState("No file chosen");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInfo, setUploadInfo] = useState("");
+  const [uploadErrors, setUploadErrors] = useState<BulkImportResult["errors"]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  const [filterBu, setFilterBu] = useState("");
-  const [filterDivision, setFilterDivision] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState("");
-  const [filterApplication, setFilterApplication] = useState("");
+  const [searchBy, setSearchBy] = useState("all");
+  const [keyword, setKeyword] = useState("");
+  const [appliedSearchBy, setAppliedSearchBy] = useState("all");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [showModal, setShowModal] = useState(false);
   const [selectedBu, setSelectedBu] = useState("");
@@ -126,6 +135,8 @@ export default function DeptAplikasiPage() {
     let active = true;
 
     (async () => {
+      setLoading(true);
+
       const [mappingRes, buRes, divRes, deptRes, appRes] = await Promise.all([
         fetchDepartmentApplicationMappingsHierarchical(),
         fetchBusinessUnitsMaster(),
@@ -157,19 +168,39 @@ export default function DeptAplikasiPage() {
   }, []);
 
   const filteredRows = useMemo(() => {
-    const buTerm = filterBu.trim().toLowerCase();
-    const divTerm = filterDivision.trim().toLowerCase();
-    const deptTerm = filterDepartment.trim().toLowerCase();
-    const appTerm = filterApplication.trim().toLowerCase();
+    const term = appliedKeyword.trim().toLowerCase();
 
     return rows.filter((row) => {
-      if (buTerm && !row.businessUnitName.toLowerCase().includes(buTerm)) return false;
-      if (divTerm && !row.divisionName.toLowerCase().includes(divTerm)) return false;
-      if (deptTerm && !row.departmentName.toLowerCase().includes(deptTerm)) return false;
-      if (appTerm && !row.applications.some((app) => app.applicationName.toLowerCase().includes(appTerm))) return false;
+      if (!term) return true;
+
+      if (appliedSearchBy === "businessUnit") {
+        return row.businessUnitName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "division") {
+        return row.divisionName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "department") {
+        return row.departmentName.toLowerCase().includes(term);
+      }
+      if (appliedSearchBy === "application") {
+        return row.applications.some((app) => app.applicationName.toLowerCase().includes(term));
+      }
+
+      const haystacks = [
+        row.businessUnitName,
+        row.divisionName,
+        row.departmentName,
+        ...row.applications.map((app) => app.applicationName),
+      ];
+      if (!haystacks.some((value) => String(value || "").toLowerCase().includes(term))) return false;
       return true;
     });
-  }, [rows, filterBu, filterDivision, filterDepartment, filterApplication]);
+  }, [rows, appliedKeyword, appliedSearchBy]);
+
+  const onApplySearch = () => {
+    setAppliedSearchBy(searchBy);
+    setAppliedKeyword(keyword);
+  };
 
   const divisionOptions = useMemo(
     () =>
@@ -319,21 +350,53 @@ export default function DeptAplikasiPage() {
   };
 
   const onPickUploadFile: React.ChangeEventHandler<HTMLInputElement> = (event) => {
-    const file = event.target.files?.[0];
+    const file = event.target.files?.[0] ?? null;
     setUploadFileName(file?.name || "No file chosen");
+    setUploadFile(file);
     setUploadInfo("");
+    setUploadErrors([]);
   };
 
-  const onDownloadTemplate = () => {
-    setUploadInfo("Template upload Mapping Department - Aplikasi belum tersedia.");
+  const onDownloadTemplate = async () => {
+    const result = await downloadMappingTemplate("application-department");
+    if (!result.success || !result.blob) {
+      setUploadInfo("Gagal mengunduh template. Coba lagi.");
+      return;
+    }
+    const url = URL.createObjectURL(result.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "template-mapping-dept-aplikasi.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
-  const onUploadMapping = () => {
-    if (uploadFileName === "No file chosen") {
+  const onUploadMapping = async () => {
+    if (!uploadFile) {
       setUploadInfo("Pilih file terlebih dahulu.");
       return;
     }
-    setUploadInfo("Upload bulk Mapping Department - Aplikasi belum tersedia.");
+    setUploading(true);
+    setUploadInfo("");
+    setUploadErrors([]);
+
+    const result = await bulkImportMappings(uploadFile, "application-department");
+    setUploading(false);
+
+    if (!result.success) {
+      setUploadInfo(result.message || "Upload gagal.");
+      setUploadErrors(result.errors ?? []);
+      return;
+    }
+
+    const summary = `Berhasil diimpor: ${result.imported ?? 0} baris. Dilewati: ${result.skipped ?? 0}. Gagal: ${result.failed ?? 0}.`;
+    setUploadInfo(summary);
+    setUploadErrors(result.errors ?? []);
+    setUploadFileName("No file chosen");
+    setUploadFile(null);
+    const input = document.getElementById("dept-aplikasi-file") as HTMLInputElement | null;
+    if (input) input.value = "";
+    await load();
   };
 
   return (
@@ -358,24 +421,34 @@ export default function DeptAplikasiPage() {
           <h2 className={styles.panelTitle}>Filter Data</h2>
           <div className={styles.meta}>Total: {filteredRows.length} records</div>
         </div>
-        <div className={styles.filterGrid}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Business Unit</label>
-            <input className={styles.input} value={filterBu} onChange={(event) => setFilterBu(event.target.value)} placeholder="Cari Business Unit" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Division</label>
-            <input className={styles.input} value={filterDivision} onChange={(event) => setFilterDivision(event.target.value)} placeholder="Cari Division" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Department</label>
-            <input className={styles.input} value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} placeholder="Cari Department" />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Application</label>
-            <input className={styles.input} value={filterApplication} onChange={(event) => setFilterApplication(event.target.value)} placeholder="Cari Application" />
+        <div className={baseStyles.filterBarGrid}>
+          <div className={baseStyles.filterField}>
+            <label id="dept-app-filter-label-status" className={baseStyles.filterLabel} htmlFor="dept-app-status-filter">Status</label>
+            <Dropdown
+              id="dept-app-status-filter"
+              className={baseStyles.filterSelect}
+              fullWidth
+              options={[{ value: "all", label: "All" }]}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              aria-labelledby="dept-app-filter-label-status"
+            />
           </div>
         </div>
+        <SearchBar
+          options={[
+            { value: "all", label: "Search By" },
+            { value: "businessUnit", label: "Business Unit" },
+            { value: "division", label: "Division" },
+            { value: "department", label: "Department" },
+            { value: "application", label: "Application" },
+          ]}
+          selectedValue={searchBy}
+          keyword={keyword}
+          onSelectedValueChange={setSearchBy}
+          onKeywordChange={setKeyword}
+          onButtonClick={onApplySearch}
+        />
       </section>
 
       <section className={styles.panel}>
@@ -389,12 +462,12 @@ export default function DeptAplikasiPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>No</th>
-                  <th>Business Unit</th>
-                  <th>Division</th>
-                  <th>Department</th>
-                  <th>Applications</th>
-                  <th>Actions</th>
+                  <th scope="col">No</th>
+                  <th scope="col">Business Unit</th>
+                  <th scope="col">Division</th>
+                  <th scope="col">Department</th>
+                  <th scope="col">Applications</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -456,36 +529,70 @@ export default function DeptAplikasiPage() {
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Upload Data Mapping</h2>
-          <span className={styles.meta}>Upload file CSV/Excel untuk import data mapping.</span>
+          <span className={styles.meta}>Upload file Excel (.xlsx) untuk import data mapping secara massal.</span>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.label}>Pilih file</label>
+          <label className={styles.label} htmlFor="dept-aplikasi-file">Pilih file Excel</label>
           <div className={styles.uploadRow}>
             <div className={styles.filePickerWrap}>
               <input
                 id="dept-aplikasi-file"
                 className={styles.fileInputHidden}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".xlsx,.xls"
                 onChange={onPickUploadFile}
+                aria-describedby="dept-aplikasi-upload-note"
               />
               <label className={styles.fileTrigger} htmlFor="dept-aplikasi-file">
-                Choose File
+                Pilih File
               </label>
               <span className={styles.fileText}>{uploadFileName}</span>
             </div>
-            <button className={`${styles.btn} ${styles.btnSecondary}`} type="button" onClick={onDownloadTemplate}>
+            <button
+              className={`${styles.btn} ${styles.btnSecondary}`}
+              type="button"
+              onClick={() => void onDownloadTemplate()}
+            >
               Download Template
             </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} type="button" onClick={onUploadMapping}>
-              Upload
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              type="button"
+              onClick={() => void onUploadMapping()}
+              disabled={uploading || !uploadFile}
+              aria-busy={uploading}
+            >
+              {uploading ? "Mengupload..." : "Upload"}
             </button>
           </div>
         </div>
-        <div className={styles.uploadNote}>
-          Format upload: CSV/Excel dengan kolom Business Unit, Division, Department, Application.
-        </div>
-        {uploadInfo ? <div className={styles.meta}>{uploadInfo}</div> : null}
+        <p id="dept-aplikasi-upload-note" className={styles.uploadNote}>
+          Format: Excel (.xlsx) dengan kolom <strong>Application Code</strong> dan <strong>Department Code</strong>.
+          Download template untuk contoh format yang benar.
+        </p>
+        {uploadInfo ? (
+          <div
+            className={uploadErrors && uploadErrors.length > 0 ? styles.error : styles.meta}
+            role="status"
+            aria-live="polite"
+          >
+            {uploadInfo}
+          </div>
+        ) : null}
+        {uploadErrors && uploadErrors.length > 0 ? (
+          <details className={styles.uploadErrorDetails}>
+            <summary className={styles.uploadErrorSummary}>
+              Lihat detail error ({uploadErrors.length} baris)
+            </summary>
+            <ul className={styles.uploadErrorList}>
+              {uploadErrors.map((err, i) => (
+                <li key={i}>
+                  <strong>Baris {err.row}:</strong> {err.errors.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       {showModal ? (
@@ -498,25 +605,27 @@ export default function DeptAplikasiPage() {
             resetForm();
           }}
         >
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label={editTarget ? "Edit Mapping Department Aplikasi" : "Tambah Mapping Department Aplikasi"} onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="dept-app-modal-title" onClick={(event) => event.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
+              <h2 id="dept-app-modal-title" className={styles.modalTitle}>{editTarget ? "Edit Mapping" : "Tambah Mapping"}</h2>
               <button
-                className={styles.btn}
+                className={styles.modalClose}
                 type="button"
+                aria-label="Close"
                 onClick={() => {
                   if (submitting) return;
                   setShowModal(false);
                   resetForm();
                 }}
               >
-                Close
+                ✕
               </button>
             </div>
             <div className={styles.modalBody}>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Business Unit</label>
+                <label id="dept-app-modal-label-bu" className={styles.label} htmlFor="dept-app-modal-bu">Business Unit</label>
                 <Dropdown
+                  id="dept-app-modal-bu"
                   className={styles.input}
                   options={businessUnits.map((item) => ({ value: item.BusinessUnitId, label: item.Name }))}
                   value={selectedBu}
@@ -527,11 +636,13 @@ export default function DeptAplikasiPage() {
                   }}
                   placeholder="Pilih Business Unit"
                   disabled={Boolean(editTarget)}
+                  aria-labelledby="dept-app-modal-label-bu"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Division</label>
+                <label id="dept-app-modal-label-division" className={styles.label} htmlFor="dept-app-modal-division">Division</label>
                 <Dropdown
+                  id="dept-app-modal-division"
                   className={styles.input}
                   options={divisionOptions}
                   value={selectedDivision}
@@ -541,26 +652,36 @@ export default function DeptAplikasiPage() {
                   }}
                   placeholder="Pilih Division"
                   disabled={Boolean(editTarget)}
+                  aria-labelledby="dept-app-modal-label-division"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Department</label>
+                <label id="dept-app-modal-label-department" className={styles.label} htmlFor="dept-app-modal-department">Department</label>
                 <Dropdown
+                  id="dept-app-modal-department"
                   className={styles.input}
                   options={departmentOptions}
                   value={selectedDepartment}
                   onChange={setSelectedDepartment}
                   placeholder="Pilih Department"
                   disabled={Boolean(editTarget)}
+                  aria-labelledby="dept-app-modal-label-department"
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.label}>Applications</label>
-                <div className={styles.checkboxGrid}>
+                <span id="dept-app-modal-label-apps" className={styles.label}>Applications</span>
+                <div className={styles.checkboxGrid} role="group" aria-labelledby="dept-app-modal-label-apps">
                   {applications.length === 0 ? <div className={styles.meta}>Tidak ada aplikasi aktif</div> : null}
                   {applications.map((app) => (
                     <label key={app.ApplicationId} className={styles.checkboxItem}>
-                      <input type="checkbox" checked={selectedAppIds.includes(app.ApplicationId)} onChange={() => toggleAppSelection(app.ApplicationId)} />
+                      <input
+                        id={`deptAppSelect-${app.ApplicationId}`}
+                        name="selectedAppIds"
+                        type="checkbox"
+                        value={String(app.ApplicationId)}
+                        checked={selectedAppIds.includes(app.ApplicationId)}
+                        onChange={() => toggleAppSelection(app.ApplicationId)}
+                      />
                       <span>{app.Name}</span>
                     </label>
                   ))}

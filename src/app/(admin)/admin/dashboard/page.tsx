@@ -46,17 +46,37 @@ export default function DashboardPage() {
   const [appliedKeyword, setAppliedKeyword] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     (async () => {
-      const result = await fetchSurveyOverview();
-      setLoading(false);
-      if (!result.success) {
-        setError(result.message || "Gagal memuat data survey");
+      setLoading(true);
+
+      try {
+        const result = await fetchSurveyOverview();
+        if (!active) return;
+
+        if (!result.success) {
+          setError(result.message || "Gagal memuat data survey");
+          setSurveys([]);
+          return;
+        }
+
+        setError("");
+        setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
+      } catch {
+        if (!active) return;
+        setError("Terjadi kesalahan saat memuat data survey");
         setSurveys([]);
-        return;
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-      setError("");
-      setSurveys(result.surveys.filter((survey) => resolveEventStatus(survey) !== "Draft"));
     })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredSurveys = useMemo(() => {
@@ -75,10 +95,7 @@ export default function DashboardPage() {
         return survey.Title.toLowerCase().includes(normalizedKeyword);
       }
 
-      return (
-        survey.Title.toLowerCase().includes(normalizedKeyword) ||
-        effectiveStatus.toLowerCase().includes(normalizedKeyword)
-      );
+      return survey.Title.toLowerCase().includes(normalizedKeyword);
     });
   }, [surveys, periodStart, periodEnd, statusFilter, appliedKeyword, appliedSearchBy]);
 
@@ -114,52 +131,21 @@ export default function DashboardPage() {
 
       <section className={styles.panel}>
         <h2 className={styles.panelTitle}>Filter</h2>
-        <div className={styles.periodRow}>
-          <div className={styles.periodLabel}>PERIODE</div>
-          <div className={styles.periodColon}>:</div>
-          <input
-            id="periodStart"
-            className={`${styles.input} ${styles.periodInput}`}
-            type="date"
-            value={periodStart}
-            onChange={(event) => setPeriodStart(event.target.value)}
-          />
-          <input
-            className={`${styles.input} ${styles.periodInput}`}
-            type="date"
-            value={periodEnd}
-            onChange={(event) => setPeriodEnd(event.target.value)}
-          />
+        <div className={styles.filterToolbar}>
+          <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
+            <label className={styles.filterLabel} htmlFor="dashPeriodStart">Periode Mulai</label>
+            <input id="dashPeriodStart" name="dashPeriodStart" className={styles.filterControl} type="date" aria-label="Tanggal mulai periode" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+          </div>
+          <div className={`${styles.filterGroup} ${styles.filterGroupSm}`}>
+            <label className={styles.filterLabel} htmlFor="dashPeriodEnd">Periode Akhir</label>
+            <input id="dashPeriodEnd" name="dashPeriodEnd" className={styles.filterControl} type="date" aria-label="Tanggal akhir periode" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+          </div>
+          <div className={`${styles.filterGroup} ${styles.filterGroupMd}`}>
+            <label className={styles.filterLabel}>Status</label>
+            <Dropdown className={styles.filterControl} fullWidth options={[{ value: "all", label: "Semua Status" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]} value={statusFilter} onChange={setStatusFilter} aria-label="Filter status event" />
+          </div>
+          <SearchBar options={[{ value: "all", label: "Search By" }, { value: "event", label: "Event" }]} selectedValue={searchBy} keyword={keyword} onSelectedValueChange={setSearchBy} onKeywordChange={setKeyword} onButtonClick={onApplySearch} placeholder="Cari event..." />
         </div>
-        <div className={styles.periodRow}>
-          <div className={styles.periodLabel}>STATUS</div>
-          <div className={styles.periodColon}>:</div>
-          <Dropdown
-            className={`${styles.select} ${styles.statusControl}`}
-            options={[
-              { value: "all", label: "All" },
-              { value: "active", label: "Active" },
-              { value: "closed", label: "Closed" },
-            ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-        </div>
-        <SearchBar
-          rowClassName={styles.masterSearchRow}
-          selectClassName={styles.masterSearchSelect}
-          inputClassName={`${styles.input} ${styles.masterSearchInput}`}
-          buttonClassName={styles.masterSearchButton}
-          options={[
-            { value: "all", label: "Search By" },
-            { value: "event", label: "Event" },
-          ]}
-          selectedValue={searchBy}
-          keyword={keyword}
-          onSelectedValueChange={setSearchBy}
-          onKeywordChange={setKeyword}
-          onButtonClick={onApplySearch}
-        />
       </section>
 
       <section className={styles.panel}>
@@ -174,14 +160,14 @@ export default function DashboardPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Event</th>
-                  <th>Periode</th>
-                  <th>Status</th>
-                  <th>Responden</th>
-                  <th>Target Responden</th>
-                  <th>Score</th>
-                  <th>Target Score</th>
-                  {showReportAction ? <th>Aksi</th> : null}
+                  <th scope="col">Event</th>
+                  <th scope="col">Periode</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Responden</th>
+                  <th scope="col">Target Responden</th>
+                  <th scope="col">Score</th>
+                  <th scope="col">Target Score</th>
+                  {showReportAction ? <th scope="col">Aksi</th> : null}
                 </tr>
               </thead>
               <tbody>

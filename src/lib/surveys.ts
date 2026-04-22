@@ -1,6 +1,6 @@
 "use client";
 
-import { getAccessToken } from "@/lib/auth";
+import { clearSession, getAccessToken } from "@/lib/auth";
 import type { SurveyConfiguration, SurveyDetail, SurveyOverviewItem, SurveyQuestion } from "@/types/survey";
 
 const API_BASE_PATH = process.env.NEXT_PUBLIC_API_BASE_PATH || "/api/v1";
@@ -46,10 +46,14 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 async function requestJson(
   path: string,
   init: RequestInit,
-): Promise<{ ok: boolean; payload: Record<string, unknown> | null }> {
+): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> | null }> {
   const response = await fetch(path, init);
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-  return { ok: response.ok, payload };
+  if (response.status === 401) {
+    clearSession();
+    if (typeof window !== "undefined") window.location.href = "/admin/login";
+  }
+  return { ok: response.ok, status: response.status, payload };
 }
 
 function toSchedulePayload(input: ScheduleRequest) {
@@ -141,6 +145,7 @@ export async function createEventDraft(input: {
   startDate?: string;
   endDate?: string;
   assignedAdminId?: string;
+  assignedAdminIds?: string[];
   targetRespondents?: number;
   targetScore?: number;
 }): Promise<{ success: boolean; message?: string }> {
@@ -343,6 +348,8 @@ export async function updateEventById(
     startDate?: string;
     endDate?: string;
     status: string;
+    assignedAdminId?: string;
+    assignedAdminIds?: string[];
     targetRespondents?: number;
     targetScore?: number;
   },
@@ -353,12 +360,18 @@ export async function updateEventById(
   }
 
   try {
-        const payload: Record<string, unknown> = {
+    const payload: Record<string, unknown> = {
       title: input.title,
       description: input.description || "",
       status: input.status,
     };
 
+    if (input.assignedAdminId !== undefined) {
+      payload.assignedAdminId = input.assignedAdminId;
+    }
+    if (input.assignedAdminIds !== undefined) {
+      payload.assignedAdminIds = input.assignedAdminIds;
+    }
     if (input.startDate !== undefined) {
       payload.startDate = input.startDate;
     }
@@ -384,6 +397,45 @@ export async function updateEventById(
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     if (!response.ok || body?.success !== true) {
       return { success: false, message: getErrorMessage(body, "Gagal menyimpan event") };
+    }
+
+    return { success: true };
+  } catch {
+    return { success: false, message: "Gagal terhubung ke server" };
+  }
+}
+
+export async function deleteEventById(
+  surveyId: string,
+): Promise<{ success: boolean; message?: string }> {
+  const token = getAccessToken();
+  if (!token) {
+    return { success: false, message: "Sesi login tidak ditemukan" };
+  }
+
+  try {
+    const response = await fetch(`${EVENTS_ENDPOINT}/${surveyId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    let body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    let resolvedResponse = response;
+    if (response.status === 404) {
+      const fallbackResponse = await fetch(`${SURVEYS_ENDPOINT}/${surveyId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      resolvedResponse = fallbackResponse;
+      body = (await fallbackResponse.json().catch(() => null)) as Record<string, unknown> | null;
+    }
+
+    if (!resolvedResponse.ok || body?.success !== true) {
+      return { success: false, message: getErrorMessage(body, "Gagal menghapus event") };
     }
 
     return { success: true };

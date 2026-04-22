@@ -44,9 +44,11 @@ type GroupedMenu = Partial<Record<(typeof menuOrder)[number], NavigationItem[]>>
 interface AdminSidebarProps {
   menu: NavigationItem[];
   pathname: string;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function AdminSidebar({ menu, pathname }: AdminSidebarProps) {
+export default function AdminSidebar({ menu, pathname, isOpen, onClose }: AdminSidebarProps) {
   const groupedMenu = menu.reduce<GroupedMenu>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];
     acc[item.group]?.push(item);
@@ -54,7 +56,7 @@ export default function AdminSidebar({ menu, pathname }: AdminSidebarProps) {
   }, {});
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ""}`}>
       <ul className={styles.menu}>
         {menuOrder.map((groupName) => {
           const items = groupedMenu[groupName] || [];
@@ -69,6 +71,7 @@ export default function AdminSidebar({ menu, pathname }: AdminSidebarProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={onClose}
                     className={[
                       styles.menuLink,
                       menuIconClass(item.icon),

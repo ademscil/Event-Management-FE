@@ -12,48 +12,16 @@ import {
   type ApprovalTakeout,
 } from "@/lib/approvals";
 import { Dropdown } from "@/components/common/dropdown";
-import { fetchFunctionsMaster } from "@/lib/master-data";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
 import { useEffect, useMemo, useState } from "react";
 import baseStyles from "../page-mockup.module.css";
 import styles from "../approval.module.css";
+import ApprovalAdminDialogs from "./approval-admin-dialogs";
+import { formatDateTime, getRespondentAriaLabel, getTakeoutAriaLabel, mapApprovalStatus, toCsvValue, toSafeFileStem } from "./approval-admin-utils";
 
 type Tab = "respondents" | "takeout";
 type ModalState = { type: "none" } | { type: "detail"; row: ApprovalRespondent };
-
-function mapApprovalStatus(value?: string | null): { label: string; tone: string } {
-  switch (value) {
-    case "PendingITLead":
-      return { label: "Pending IT Lead", tone: styles.pillBest };
-    case "RejectedByAdmin":
-      return { label: "Rejected", tone: styles.pillDuplicate };
-    case "ApprovedFinal":
-      return { label: "Approved Final", tone: styles.pillUnique };
-    case "PendingAdminTakeoutDecision":
-      return { label: "Pending Takeout", tone: styles.pillDuplicate };
-    default:
-      return { label: "Submitted", tone: styles.pillNo };
-  }
-}
-
-function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function toCsvValue(value: string | number | boolean | null | undefined): string {
-  const text = String(value ?? "");
-  return `"${text.replace(/"/g, '""')}"`;
-}
 
 export default function ApprovalAdminPage() {
   const role: UserRole | null = getCurrentUser()?.role ?? null;
@@ -69,7 +37,6 @@ export default function ApprovalAdminPage() {
   const [duplicateFilter, setDuplicateFilter] = useState<"all" | "duplicate" | "unique">("all");
 
   const [surveys, setSurveys] = useState<Array<{ id: string; title: string }>>([]);
-  const [functions, setFunctions] = useState<Array<{ id: string; name: string }>>([]);
   const [respondents, setRespondents] = useState<ApprovalRespondent[]>([]);
   const [takeouts, setTakeouts] = useState<ApprovalTakeout[]>([]);
   const [selectedRespondentIds, setSelectedRespondentIds] = useState<string[]>([]);
@@ -81,29 +48,39 @@ export default function ApprovalAdminPage() {
   const [takeoutRejectReason, setTakeoutRejectReason] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     const run = async () => {
       try {
-        const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
+        const surveyRes = await fetchSurveyOverview();
+        if (!active) return;
+
         if (!surveyRes.success) {
-          setLoading(false);
           setError(surveyRes.message || "Gagal memuat survey");
+          setSurveys([]);
+          setSurveyId("");
           return;
         }
 
         const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
         setSurveys(surveyOptions);
         setSurveyId(surveyOptions[0]?.id || "");
-
-        if (functionRes.success) {
-          setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
-        }
       } catch {
+        if (!active) return;
         setError("Gagal memuat data awal halaman approval.");
+        setSurveys([]);
+        setSurveyId("");
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
     void run();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -152,9 +129,20 @@ export default function ApprovalAdminPage() {
     () => surveys.map((item) => ({ value: item.id, label: item.title })),
     [surveys]
   );
+  const derivedFunctions = useMemo(() => {
+    const map = new Map<string, string>();
+    takeouts.forEach((item) => {
+      if (item.FunctionId && item.FunctionName) {
+        map.set(String(item.FunctionId), String(item.FunctionName));
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [takeouts]);
   const functionDropdownOptions = useMemo(
-    () => [{ value: "all", label: "All Functions" }, ...functions.map((item) => ({ value: item.id, label: item.name }))],
-    [functions]
+    () => [{ value: "all", label: "All Functions" }, ...derivedFunctions.map((item) => ({ value: item.id, label: item.name }))],
+    [derivedFunctions]
   );
   const duplicateDropdownOptions = useMemo(
     () => [
@@ -186,7 +174,8 @@ export default function ApprovalAdminPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `approval-admin-respondents-${surveyId || "survey"}.csv`;
+    const activeSurvey = surveys.find((item) => item.id === surveyId);
+    link.download = `approval-admin-respondents-${toSafeFileStem(activeSurvey?.title, "survey")}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -194,6 +183,7 @@ export default function ApprovalAdminPage() {
   };
 
   const reloadRespondents = async () => {
+    setError("");
     const respondentRes = await fetchApprovalRespondents({ surveyId, duplicateFilter });
     if (!respondentRes.success) {
       setError(respondentRes.message);
@@ -203,6 +193,7 @@ export default function ApprovalAdminPage() {
   };
 
   const reloadTakeouts = async () => {
+    setError("");
     const takeoutRes = await fetchProposedTakeouts({ surveyId, functionId: functionId === "all" ? undefined : functionId });
     if (!takeoutRes.success) {
       setError(takeoutRes.message);
@@ -331,7 +322,7 @@ export default function ApprovalAdminPage() {
       <section className={baseStyles.panel}>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -339,16 +330,18 @@ export default function ApprovalAdminPage() {
               value={surveyId}
               onChange={setSurveyId}
               placeholder="Pilih survey"
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>
@@ -462,7 +455,7 @@ export default function ApprovalAdminPage() {
                           </td>
                           <td className={styles.center}>
                             <input
-                              aria-label={`Pilih responden ${row.RespondentName || row.RespondentEmail || row.ResponseId}`}
+                              aria-label={getRespondentAriaLabel(row)}
                               type="checkbox"
                               checked={selected}
                               onChange={(event) =>
@@ -544,7 +537,7 @@ export default function ApprovalAdminPage() {
                         <td className={styles.center}>{row.TakeoutStatus || "-"}</td>
                         <td className={styles.center}>
                           <input
-                            aria-label={`Pilih proposed takeout ${row.QuestionResponseId}`}
+                            aria-label={getTakeoutAriaLabel(row)}
                             type="checkbox"
                             checked={selectedTakeoutKeys.includes(row.QuestionResponseId)}
                             onChange={(event) =>
@@ -567,93 +560,22 @@ export default function ApprovalAdminPage() {
         )}
       </section>
 
-      {modal.type !== "none" ? (
-        <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail responden" onClick={(event) => event.stopPropagation()}>
-            <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Detail Responden</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail responden">
-                x
-              </button>
-            </header>
-            <div className={styles.modalBody}>
-              <p><strong>Nama:</strong> {modal.row.RespondentName || "-"}</p>
-              <p><strong>Email:</strong> {modal.row.RespondentEmail || "-"}</p>
-              <p><strong>Department:</strong> {modal.row.DepartmentName || "-"}</p>
-              <p><strong>Aplikasi:</strong> {modal.row.ApplicationName || "-"}</p>
-              <p><strong>Submitted:</strong> {formatDateTime(modal.row.SubmittedAt)}</p>
-              <p><strong>Duplicate Count:</strong> {modal.row.DuplicateCount || 1}</p>
-            </div>
-            <footer className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setModal({ type: "none" })}>
-                Close
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
-
-      {rejectOpen ? (
-        <div className={styles.modalOverlay} onClick={() => setRejectOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject response awal" onClick={(event) => event.stopPropagation()}>
-            <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Reject Selected Response</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setRejectOpen(false)} aria-label="Tutup modal reject response">
-                x
-              </button>
-            </header>
-            <div className={styles.modalBody}>
-              <p className={styles.meta}>Jumlah response terpilih: {selectedRespondentIds.length}</p>
-              <textarea
-                className={styles.textarea}
-                rows={4}
-                placeholder="Alasan reject wajib diisi untuk histori"
-                value={rejectReason}
-                onChange={(event) => setRejectReason(event.target.value)}
-              />
-            </div>
-            <footer className={styles.modalActions}>
-              <button type="button" className={styles.btnGhost} onClick={() => setRejectOpen(false)}>
-                Batal
-              </button>
-              <button type="button" className={styles.btnDanger} onClick={() => void handleRejectSelected()}>
-                Reject Response
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
-
-      {takeoutRejectOpen ? (
-        <div className={styles.modalOverlay} onClick={() => setTakeoutRejectOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Reject takeout" onClick={(event) => event.stopPropagation()}>
-            <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Reject Proposed Takeout</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setTakeoutRejectOpen(false)} aria-label="Tutup modal reject takeout">
-                x
-              </button>
-            </header>
-            <div className={styles.modalBody}>
-              <p className={styles.meta}>Jumlah usulan takeout terpilih: {selectedTakeoutRows.length}</p>
-              <textarea
-                className={styles.textarea}
-                rows={4}
-                placeholder="Alasan reject takeout wajib diisi"
-                value={takeoutRejectReason}
-                onChange={(event) => setTakeoutRejectReason(event.target.value)}
-              />
-            </div>
-            <footer className={styles.modalActions}>
-              <button type="button" className={styles.btnGhost} onClick={() => setTakeoutRejectOpen(false)}>
-                Batal
-              </button>
-              <button type="button" className={styles.btnDanger} onClick={() => void handleRejectTakeouts()}>
-                Reject Takeout
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
+      <ApprovalAdminDialogs
+        handleRejectSelected={handleRejectSelected}
+        handleRejectTakeouts={handleRejectTakeouts}
+        modal={modal}
+        rejectOpen={rejectOpen}
+        rejectReason={rejectReason}
+        selectedRespondentIds={selectedRespondentIds}
+        selectedTakeoutRows={selectedTakeoutRows}
+        setModal={setModal}
+        setRejectOpen={setRejectOpen}
+        setRejectReason={setRejectReason}
+        setTakeoutRejectOpen={setTakeoutRejectOpen}
+        setTakeoutRejectReason={setTakeoutRejectReason}
+        takeoutRejectOpen={takeoutRejectOpen}
+        takeoutRejectReason={takeoutRejectReason}
+      />
     </>
   );
 }

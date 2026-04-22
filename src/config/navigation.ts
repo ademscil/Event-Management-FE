@@ -42,7 +42,7 @@ export const adminNavigation: NavigationItem[] = [
     href: "/admin/report",
     group: "EVENT",
     icon: "report",
-    roles: ["AdminEvent", "DepartmentHead"],
+    roles: ["AdminEvent", "ITLead", "DepartmentHead"],
   },
   {
     label: "Audit Trail",

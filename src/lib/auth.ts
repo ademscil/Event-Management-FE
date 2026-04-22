@@ -25,6 +25,12 @@ function clearLegacyLocalStorage(): void {
   localStorage.removeItem(USER_KEY);
 }
 
+/**
+ * @deprecated Legacy function that reads token from localStorage.
+ * This is only used internally for the logout request and validateSession.
+ * All other API calls use cookie-based auth via credentials: "include".
+ * Do NOT use this in new code — use getAccessToken() + Authorization header pattern instead.
+ */
 function buildAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const token = hasStorage() && typeof window.localStorage !== "undefined"
     ? window.localStorage.getItem(TOKEN_KEY)

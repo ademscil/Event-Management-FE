@@ -13,7 +13,7 @@ import {
 import { fetchFunctionsMaster } from "@/lib/master-data";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import baseStyles from "../page-mockup.module.css";
 import styles from "../approval.module.css";
 
@@ -26,6 +26,15 @@ function shortText(value?: string | null, max = 72): string {
   const text = String(value || "").trim();
   if (!text) return "-";
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function getCommentSelectionAriaLabel(row: ApprovalComment): string {
+  const question = String(row.QuestionText || "").trim();
+  const application = String(row.ApplicationName || "").trim();
+  if (question && application) return `Pilih komentar ${question} - ${application}`;
+  if (question) return `Pilih komentar ${question}`;
+  if (application) return `Pilih komentar ${application}`;
+  return "Pilih komentar";
 }
 
 export default function BestCommentsPage() {
@@ -68,7 +77,7 @@ export default function BestCommentsPage() {
     void run();
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const selectedSurvey = surveyId === "all" ? undefined : surveyId;
     const selectedFunction = functionId === "all" ? undefined : functionId;
     try {
@@ -95,14 +104,13 @@ export default function BestCommentsPage() {
       setComments([]);
       setBestRows([]);
     }
-  };
+  }, [surveyId, functionId]);
 
   useEffect(() => {
     setError("");
     setMessage("");
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId, functionId]);
+  }, [loadData]);
 
   const selectedRows = useMemo(
     () => comments.filter((row) => selectedKeys.includes(`${row.ResponseId}-${row.QuestionId}`)),
@@ -177,23 +185,25 @@ export default function BestCommentsPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
               options={surveyDropdownOptions}
               value={surveyId}
               onChange={setSurveyId}
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>
@@ -276,7 +286,7 @@ export default function BestCommentsPage() {
                               <input
                                 type="checkbox"
                                 checked={selected}
-                                aria-label={`Pilih komentar ${row.QuestionResponseId}`}
+                                aria-label={getCommentSelectionAriaLabel(row)}
                                 onChange={(event) =>
                                   setSelectedKeys((prev) => {
                                     if (event.target.checked) return Array.from(new Set([...prev, key]));
@@ -366,9 +376,9 @@ export default function BestCommentsPage() {
 
       {modal.type !== "none" ? (
         <div className={styles.modalOverlay} onClick={() => setModal({ type: "none" })}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Detail komentar" onClick={(event) => event.stopPropagation()}>
+          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-labelledby="best-comments-modal-title" onClick={(event) => event.stopPropagation()}>
             <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Comment Detail</h2>
+              <h2 id="best-comments-modal-title" className={styles.modalTitle}>Comment Detail</h2>
               <button type="button" className={styles.closeBtn} onClick={() => setModal({ type: "none" })} aria-label="Tutup modal detail komentar">
                 x
               </button>

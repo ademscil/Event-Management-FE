@@ -11,26 +11,15 @@ import {
   type BestCommentWithFeedback,
   type PendingApproval,
 } from "@/lib/approvals";
-import { fetchFunctionsMaster } from "@/lib/master-data";
 import { fetchSurveyOverview } from "@/lib/surveys";
 import type { UserRole } from "@/types/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import baseStyles from "../page-mockup.module.css";
 import styles from "../approval.module.css";
+import ApprovalItLeadDialogs from "./approval-it-lead-dialogs";
+import { getFeedbackAriaLabel, getPendingReviewAriaLabel, mapError, shortText } from "./approval-it-lead-utils";
 
 type Tab = "takeout" | "feedback";
-
-function shortText(value?: string | null, max = 80): string {
-  const text = String(value || "").trim();
-  if (!text) return "-";
-  return text.length > max ? `${text.slice(0, max)}...` : text;
-}
-
-function mapError(res: Array<{ success: boolean; message?: string }>): string {
-  const firstFailed = res.find((item) => !item.success);
-  if (!firstFailed) return "";
-  return firstFailed.message || "Terjadi kesalahan saat proses approval";
-}
 
 export default function ApprovalItLeadPage() {
   const role: UserRole | null = getCurrentUser()?.role ?? null;
@@ -43,7 +32,6 @@ export default function ApprovalItLeadPage() {
   const [surveyId, setSurveyId] = useState("");
   const [functionId, setFunctionId] = useState("all");
   const [surveys, setSurveys] = useState<Array<{ id: string; title: string }>>([]);
-  const [functions, setFunctions] = useState<Array<{ id: string; name: string }>>([]);
   const [pendingRows, setPendingRows] = useState<PendingApproval[]>([]);
   const [feedbackRows, setFeedbackRows] = useState<BestCommentWithFeedback[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
@@ -59,37 +47,59 @@ export default function ApprovalItLeadPage() {
     () => surveys.map((item) => ({ value: item.id, label: item.title })),
     [surveys]
   );
+  const derivedFunctions = useMemo(() => {
+    const map = new Map<string, string>();
+    [...pendingRows, ...feedbackRows].forEach((item) => {
+      if (item.FunctionId && item.FunctionName) {
+        map.set(String(item.FunctionId), String(item.FunctionName));
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [pendingRows, feedbackRows]);
   const functionDropdownOptions = useMemo(
-    () => [{ value: "all", label: "All Functions" }, ...functions.map((item) => ({ value: item.id, label: item.name }))],
-    [functions]
+    () => [{ value: "all", label: "All Functions" }, ...derivedFunctions.map((item) => ({ value: item.id, label: item.name }))],
+    [derivedFunctions]
   );
 
   useEffect(() => {
+    let active = true;
+
     const run = async () => {
       try {
-        const [surveyRes, functionRes] = await Promise.all([fetchSurveyOverview(), fetchFunctionsMaster()]);
+        const surveyRes = await fetchSurveyOverview();
+        if (!active) return;
+
         if (!surveyRes.success) {
-          setLoading(false);
           setError(surveyRes.message || "Gagal memuat survey");
+          setSurveys([]);
+          setSurveyId("");
           return;
         }
 
         const surveyOptions = surveyRes.surveys.map((item) => ({ id: item.SurveyId, title: item.Title }));
         setSurveys(surveyOptions);
         setSurveyId(surveyOptions[0]?.id || "");
-        if (functionRes.success) {
-          setFunctions(functionRes.data.filter((item) => item.IsActive !== false).map((item) => ({ id: item.FunctionId, name: item.Name })));
-        }
       } catch {
+        if (!active) return;
         setError("Gagal memuat data awal approval IT Lead.");
+        setSurveys([]);
+        setSurveyId("");
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
     void run();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!surveyId) {
       setPendingRows([]);
       setFeedbackRows([]);
@@ -126,12 +136,11 @@ export default function ApprovalItLeadPage() {
       setPendingRows([]);
       setFeedbackRows([]);
     }
-  };
+  }, [functionId, surveyId]);
 
   useEffect(() => {
     void loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId, functionId]);
+  }, [loadData]);
 
   const handleApprove = async () => {
     if (selectedRows.length === 0) {
@@ -223,7 +232,7 @@ export default function ApprovalItLeadPage() {
         <h2 className={baseStyles.panelTitle}>Filter</h2>
         <div className={baseStyles.filterGrid}>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="survey">Survey</label>
+            <label className={baseStyles.label}>Survey</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
@@ -231,16 +240,18 @@ export default function ApprovalItLeadPage() {
               value={surveyId}
               onChange={setSurveyId}
               placeholder="Pilih survey"
+              aria-label="Pilih survey"
             />
           </div>
           <div className={baseStyles.formGroup}>
-            <label className={baseStyles.label} htmlFor="function">Function</label>
+            <label className={baseStyles.label}>Function</label>
             <Dropdown
               className={baseStyles.select}
               fullWidth
               options={functionDropdownOptions}
               value={functionId}
               onChange={setFunctionId}
+              aria-label="Filter function"
             />
           </div>
         </div>
@@ -282,7 +293,6 @@ export default function ApprovalItLeadPage() {
               <table className={baseStyles.table}>
                 <thead>
                   <tr>
-                    <th scope="col">Responden</th>
                     <th scope="col">Department</th>
                     <th scope="col">Aplikasi</th>
                     <th scope="col">Pertanyaan</th>
@@ -304,14 +314,13 @@ export default function ApprovalItLeadPage() {
                 <tbody>
                   {pendingRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className={styles.empty}>Tidak ada response pending review IT Lead untuk filter ini.</td>
+                      <td colSpan={7} className={styles.empty}>Tidak ada response pending review IT Lead untuk filter ini.</td>
                     </tr>
                   ) : (
                     pendingRows.map((row) => {
                       const key = `${row.ResponseId}-${row.QuestionId}`;
                       return (
-                        <tr key={row.QuestionResponseId}>
-                          <td>{row.RespondentName || "-"}</td>
+                        <tr key={key}>
                           <td>{row.DepartmentName || "-"}</td>
                           <td>{row.ApplicationName || "-"}</td>
                           <td>{row.QuestionText || "-"}</td>
@@ -320,7 +329,7 @@ export default function ApprovalItLeadPage() {
                           <td>{shortText(row.TakeoutReason)}</td>
                           <td className={styles.center}>
                             <input
-                              aria-label={`Pilih takeout ${row.QuestionResponseId}`}
+                              aria-label={getPendingReviewAriaLabel(row)}
                               type="checkbox"
                               checked={selectedKeys.includes(key)}
                               onChange={(event) =>
@@ -374,7 +383,7 @@ export default function ApprovalItLeadPage() {
                           <textarea
                             className={styles.textarea}
                             rows={2}
-                            aria-label={`Feedback IT Lead untuk ${row.QuestionResponseId}`}
+                            aria-label={getFeedbackAriaLabel(row)}
                             value={feedbackDraft[row.QuestionResponseId] || ""}
                             onChange={(event) => setFeedbackDraft((prev) => ({ ...prev, [row.QuestionResponseId]: event.target.value }))}
                           />
@@ -394,36 +403,14 @@ export default function ApprovalItLeadPage() {
         )}
       </section>
 
-      {proposeOpen ? (
-        <div className={styles.modalOverlay} onClick={() => setProposeOpen(false)}>
-          <div className={styles.modalCard} role="dialog" aria-modal="true" aria-label="Propose takeout" onClick={(event) => event.stopPropagation()}>
-            <header className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Propose Takeout</h2>
-              <button type="button" className={styles.closeBtn} onClick={() => setProposeOpen(false)} aria-label="Tutup modal propose takeout">
-                x
-              </button>
-            </header>
-            <div className={styles.modalBody}>
-              <p className={styles.meta}>Jumlah item terpilih: {selectedRows.length}</p>
-              <textarea
-                className={styles.textarea}
-                rows={4}
-                placeholder="Alasan propose takeout wajib diisi"
-                value={proposeReason}
-                onChange={(event) => setProposeReason(event.target.value)}
-              />
-            </div>
-            <footer className={styles.modalActions}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setProposeOpen(false)}>
-                Cancel
-              </button>
-              <button type="button" className={styles.btnDanger} onClick={() => void handleProposeTakeout()}>
-                Submit Proposal
-              </button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
+      <ApprovalItLeadDialogs
+        handleProposeTakeout={handleProposeTakeout}
+        proposeOpen={proposeOpen}
+        proposeReason={proposeReason}
+        selectedRows={selectedRows}
+        setProposeOpen={setProposeOpen}
+        setProposeReason={setProposeReason}
+      />
     </>
   );
 }
