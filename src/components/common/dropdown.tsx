@@ -9,6 +9,7 @@ type DropdownOption = {
 };
 
 type DropdownProps = {
+  id?: string;
   className?: string;
   options: DropdownOption[];
   value: string;
@@ -17,9 +18,11 @@ type DropdownProps = {
   placeholder?: string;
   fullWidth?: boolean;
   "aria-label"?: string;
+  "aria-labelledby"?: string;
 };
 
 export function Dropdown({
+  id,
   className = "",
   options,
   value,
@@ -28,6 +31,7 @@ export function Dropdown({
   placeholder = "Select...",
   fullWidth = false,
   "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -58,12 +62,14 @@ export function Dropdown({
     >
       <button
         type="button"
+        id={id}
         className={`${styles.trigger} ${isOpen ? styles.triggerOpen : ""} ${className}`}
         onClick={() => !disabled && setIsOpen((prev) => !prev)}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
       >
         <span className={styles.triggerLabel}>{displayText}</span>
         <svg
